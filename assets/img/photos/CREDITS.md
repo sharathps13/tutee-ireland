@@ -1,0 +1,167 @@
+# Photo credits
+
+All four photographs in this directory are Irish and sourced from Wikimedia
+Commons under CC-BY licences. **All four require attribution**, which is rendered
+in the footer of both pages, in the elements marked `data-photo-credit`. If you
+swap any photo, update this file **and** `PHOTO_CREDIT` in
+`_tooling/localise_ie.py`, then re-run `localise_ie.py`, `assemble.py ireland`
+and `build_unipage.py ireland`.
+
+CC-BY-SA images were deliberately avoided, as on the UK and Canada pages, to keep
+the licensing obligations to a single visible credit line. Note that unlike the
+Canadian set — where two of four were CC0 — every Irish file here is CC-BY, so
+the footer credit line is **mandatory** and must not be emptied.
+
+Each file was cropped and resized from the Commons original with `sips`. The
+output dimensions match the Canadian page's files, which in turn match the slots,
+so the layout cannot shift.
+
+---
+
+## students-campus.jpg — hero (`#home`), 1200×1143
+
+> **The filename does not describe the subject**, and it is kept because
+> `students-campus.jpg` is a literal key in the compiled stylesheet — the class
+> `bg-[url('/assets/img/photos/students-campus.jpg')]` plus the matching escaped
+> selector and `url()` in `assets/css/main.css`, and the `<link rel="preload">`
+> in the page shell. Renaming the file means editing all of those together;
+> `verify_site.py` fails on a mismatch, the browser fails silently. Check with
+> `grep -o "students-campus[^\"')]*" index.html universities.html assets/css/main.css`.
+
+- **Depicts:** The Cliffs of Moher, County Clare, looking north into the sunset
+  from near Hag's Head, with O'Brien's Tower on the headland in the distance and
+  the Atlantic below. Long grass in the foreground.
+- **Commons file page:** https://commons.wikimedia.org/wiki/File:Cliffs_of_Moher_-_Into_the_Sunset_(49540453606).jpg
+- **Author / photographer:** Ajay Suresh
+- **Licence:** CC BY 2.0 — https://creativecommons.org/licenses/by/2.0
+- **Attribution required:** `Cliffs of Moher, County Clare — photo by Ajay Suresh, CC BY 2.0`
+- **Shot:** 15 November 2019.
+- **Crop:** original 4401×3301 → `sips -c 3301 3465` (centred, to 1.0499:1) →
+  resized to 1200×1143, quality 82.
+- **Why this replaced the Campanile:** the previous hero was the Trinity College
+  Campanile — accurate and on-topic but static, and every other photo on the page
+  was also a Dublin building. A warm, wide-open landscape reads as the "Irish
+  Dream" of the headline it sits beside, and its gold-and-green palette suits the
+  page's maroon and dark-green far better than grey stone did. The trade is that
+  the hero no longer shows a campus; that signal moved rather than vanished — the
+  Campanile now fills the "Why Ireland?" panel (see `ireland-city.jpg` below),
+  whose bullets begin "World's Best Universities" — and the hero still carries the
+  overlaid "Top Ranked Irish Universities" card above the ranked carousel.
+- **Why 1.05:1 and not a wide landscape file:** the hero panel measures about
+  **596×584 CSS px on desktop (1.02:1) and 319×292 on mobile (1.09:1)** — near
+  square at every breakpoint. The div is `bg-cover bg-center`, so a 1.8:1 file
+  would have roughly 43% of its width thrown away, and the cliffs would lose the
+  grass foreground the overlay card sits on.
+- **Safe to reshape:** referenced only as a CSS `background-image` and a
+  `<link rel="preload">` — there is no `<img>` tag for it on either page, so its
+  ratio has no effect on layout.
+- **Rejected alternatives** (all checked for CC-BY and square-croppability):
+  Temple Bar (identifiable drinkers, whiskey and tobacco signage — wrong pitch
+  for a student-visa page); Samuel Beckett Bridge (storm sky, construction
+  cranes); Grand Canal Dock (night shot, wrong for a light panel); Cobh "Deck of
+  Cards" (parked cars dominate, and it duplicates the colourful-houses theme of
+  `family.jpg`); St Stephen's Green (top-down drone shot, reads as a map); UCD
+  campus lake (snapshot quality, empty foreground); Glendalough (drab, signposts).
+  Giant's Causeway was excluded outright — County Antrim is Northern Ireland, so
+  it belongs to the UK page, not this one.
+
+## team-working.jpg — `#relocate` ("The Pathway to Settlement"), 1400×933
+
+- **Depicts:** The Long Room of the Old Library, Trinity College Dublin — the
+  barrel-vaulted gallery with its shelved collection and marble busts.
+- **Commons file page:** https://commons.wikimedia.org/wiki/File:Dublin_Trinity_College_Library_Long_Room_07.jpg
+- **Author / photographer:** Zairon
+- **Licence:** CC BY 4.0 — https://creativecommons.org/licenses/by/4.0
+- **Attribution required:** `Long Room, Trinity College Library — photo by Zairon, CC BY 4.0`
+- **Shot:** 29 May 2022.
+- **Crop:** original 4054×3424 → `sips -c 2702 4054 --cropOffset 700 0` (full
+  width, 3:2, anchored low) → resized to 1400×933, quality 82. The offset matters:
+  a centred crop kept the vault and cut the floor, so the image read as a ceiling
+  rather than a study space.
+- **Note:** this image is rendered with `w-full h-auto object-cover`, so **its
+  aspect ratio drives the layout**. Any replacement must also be 3:2.
+
+## family.jpg — `#relocate` ("Relocating with Your Family?"), 1400×1050
+
+- **Depicts:** A Georgian terrace in Dublin with the city's characteristic
+  brightly painted front doors (yellow, red and blue) and wrought-iron railings.
+- **Commons file page:** https://commons.wikimedia.org/wiki/File:Dublin_colorful_doors_(6178596615).jpg
+- **Author / photographer:** Leandro Neumann Ciuffo
+- **Licence:** CC BY 2.0 — https://creativecommons.org/licenses/by/2.0
+- **Attribution required:** `Georgian doors, Dublin — photo by Leandro Neumann Ciuffo, CC BY 2.0`
+- **Shot:** 23 September 2011.
+- **Crop:** original 2877×1918 (3:2) → `sips -c 1918 2557` (centred, to 4:3) →
+  resized to 1400×1050, quality 78.
+- **Why this subject:** homes rather than people, which is the same trade the UK
+  page makes with Notting Hill and the Canadian page with Cabbagetown. See the
+  note on photographs of people below.
+
+## ireland-city.jpg — "Why Ireland?" panel (`#universities`), 1080×1200
+
+> **The filename no longer describes the subject** — it holds a campus photo, not
+> a cityscape — and it is kept because `ireland-city.jpg` is a literal key in the
+> compiled stylesheet: the Tailwind arbitrary-value class
+> `bg-[url('/assets/img/photos/ireland-city.jpg')]` plus the matching escaped
+> selector and `url()` in `assets/css/main.css`. Renaming the file means editing
+> **both** together. `verify_site.py` fails on a mismatch; the browser fails
+> silently. That rule was itself renamed from `canada-city.jpg` when this page was
+> scaffolded from the Canadian assets.
+
+- **Depicts:** The Campanile in Front Square (Parliament Square), Trinity College
+  Dublin, in full sun — the Public Theatre and the statue of George Salmon to the
+  left, the Graduates' Memorial Building to the right, students small in the
+  middle distance.
+- **Commons file page:** https://commons.wikimedia.org/wiki/File:Trinity_College_Dublin_-_Campanile_(2025).jpg
+- **Author / photographer:** P. Hughes
+- **Licence:** CC BY 4.0 — https://creativecommons.org/licenses/by/4.0
+- **Attribution required:** `Campanile, Trinity College Dublin — photo by P. Hughes, CC BY 4.0`
+- **Shot:** 13 June 2025.
+- **Crop:** original 4024×5443 (portrait) → `sips -c 4471 4024 --cropOffset 486 0`
+  (full width, centred vertically, to 0.9:1) → resized to 1080×1200, quality 82.
+- **This is the photo that used to be the hero.** It was moved here rather than
+  discarded when the hero became the Cliffs of Moher: it suits this slot better
+  than it suited the hero. The panel's headline is "Why Ireland?" and its bullets
+  begin "World's Best Universities", so a Trinity campus shot carries the
+  education signal that the landscape hero gives up — and this slot is portrait,
+  which is the orientation the original was actually shot in.
+- **Why 0.9:1 and not the 3:2 of the file it replaced:** at `lg` and above the
+  panel is two columns with `items-stretch`, so the image column is `flex-1` and
+  stretches to the height of the text column — roughly **720×790 CSS px, i.e.
+  portrait (~0.91:1)**, on a 1280–1440 viewport. The previous 3:2 file was
+  therefore side-cropped hard by `bg-cover`, which is why the Custom House
+  rendered as a tight centre crop with half the panel given to flat water. Below
+  `lg` the panel stacks and this column goes full-width and short
+  (`min-h-[160px]` on mobile, `min-h-[250px]`/`[300px]`/`[400px]` up), so
+  `bg-center` takes the middle band — the Campanile stays in frame at both.
+- **No layout effect:** the file is painted by a `<div class="absolute inset-0 …
+  bg-center bg-cover">`, so its aspect ratio cannot shift the layout. It also
+  carries `hover:scale-105 transition-transform duration-700`, a slow zoom on
+  hover; a subject that fills the frame edge-to-edge would show its borders
+  during that zoom, which is another reason to keep the lawn and sky margins.
+- **Why the Custom House went:** the previous photo (the Custom House on the
+  north quays, © Robert Linsdell, CC BY 2.0) had **scaffolding on the dome**, an
+  overcast sky and flat grey water across the lower 40% of the frame. Its credit
+  has been removed from `PHOTO_CREDIT`; the file is gone from this directory.
+
+---
+
+## Combined credit line (as rendered in the footer)
+
+> Photography: Cliffs of Moher, County Clare © Ajay Suresh (CC BY 2.0);
+> Campanile, Trinity College Dublin © P. Hughes (CC BY 4.0); Long Room,
+> Trinity College Library © Zairon (CC BY 4.0); Georgian doors, Dublin ©
+> Leandro Neumann Ciuffo (CC BY 2.0). Via Wikimedia Commons.
+
+Generated from `PHOTO_CREDIT` in `_tooling/localise_ie.py` — change it there and
+rebuild, never in the built HTML.
+
+## On photographs of people
+
+As on the UK and Canadian pages, none of the four photos has an identifiable
+person as its subject. The few walkers on the clifftop, the students crossing Front
+Square and the cyclist on the Georgian terrace are small, incidental and not
+identifiable. Appropriately
+licensed photos of people are scarce on Commons — nearly all are CC-BY-SA — so
+recognisable Irish places were the better trade. If you want students in the
+hero, buy a stock licence and drop in a file at roughly 1.05:1 — that is the one
+thing the Commons CC-BY pool genuinely cannot supply.
