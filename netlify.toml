@@ -32,17 +32,19 @@
 [[headers]]
   for = "/*"
   [headers.values]
-    # The pages load no third-party scripts, styles, fonts or images — every
-    # asset is same-origin — so script-src can stay strict with no 'unsafe-inline'.
-    # style-src does need it: the markup carries 173 inline style="" attributes
-    # inherited from the original design.
+    # Scripts are all same-origin, so script-src stays strict with no
+    # 'unsafe-inline'. Third-party assets: the Bricolage Grotesque and Caveat
+    # fonts from Google Fonts, photographs from Unsplash's CDN, country
+    # flags from flagcdn.com, and email-domain checks via Cloudflare DNS-over-HTTPS. style-src keeps
+    # 'unsafe-inline' for the inline style="" custom properties that drive the
+    # animation stagger and parallax.
     Content-Security-Policy = """
       default-src 'self'; \
       script-src 'self'; \
-      style-src 'self' 'unsafe-inline'; \
-      img-src 'self' data:; \
-      font-src 'self'; \
-      connect-src 'self' https://*.supabase.co; \
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
+      img-src 'self' data: https://images.unsplash.com https://flagcdn.com; \
+      font-src 'self' https://fonts.gstatic.com; \
+      connect-src 'self' https://*.supabase.co https://cloudflare-dns.com; \
       form-action 'self'; \
       base-uri 'self'; \
       object-src 'none'; \
@@ -60,7 +62,7 @@
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
 
-# JS and CSS filenames are stable across rebuilds (main.js, main.css), so they
+# JS and CSS filenames are stable across rebuilds (main.js, site.css), so they
 # cannot be cached immutably — a content change would never reach a returning
 # visitor. Revalidate on every load; Netlify serves a 304 when unchanged.
 [[headers]]

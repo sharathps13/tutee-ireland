@@ -165,3 +165,47 @@ licensed photos of people are scarce on Commons — nearly all are CC-BY-SA — 
 recognisable Irish places were the better trade. If you want students in the
 hero, buy a stock licence and drop in a file at roughly 1.05:1 — that is the one
 thing the Commons CC-BY pool genuinely cannot supply.
+
+---
+
+## Unsplash photographs (hot-linked)
+
+Since the October 2026 redesign, most photographs on the page are loaded from Unsplash's CDN
+(`images.unsplash.com`) under the [Unsplash License](https://unsplash.com/license): free for
+commercial use, no permission or attribution required (credit given in the footer as a courtesy).
+Only `team-working.jpg` (Long Room) and `family.jpg` (Georgian doors) from the CC-BY set above are
+still used, so the footer credit line names only those two. `students-campus.jpg` and
+`ireland-city.jpg` are no longer referenced.
+
+| Where | Subject | Unsplash photo id | Photographer |
+| --- | --- | --- | --- |
+| Hero background (animated in WebGL by hero-fx.js) | Cliffs of Moher at sunset, County Clare | AEallbg9q_A | Federico Beccari |
+| Polaroid 1 | Ha'penny Bridge, Dublin | blDB0HbjB1k | Sophie Popplewell |
+| Polaroid 2 | Campanile, Trinity College Dublin | XbIkiMTZQ4Y | Rubina Ajdary |
+| Polaroid 3 | The Long Walk, Galway | UR-9hOEW-Ww | Rory Hennessey |
+| Polaroid 4 | Kylemore Abbey, Connemara | hLqJHN01XMU | Alex Grodkiewicz |
+| Polaroid 5 | Cobh, County Cork | rTG1TR6Ygb0 | Jason Murphy |
+| Polaroid 6 | Ring of Kerry | jW9FwDm0mxw | K. Mitch Hodge |
+| Polaroid 7 | Dunguaire Castle, Galway Bay | KViyTyPUsl8 | Wallace Bentt |
+| Why Ireland 1 | University College Cork quad | vFm2dW99YAw | Derek O'Keeffe |
+| Why Ireland 2 | Old Library, Trinity College Dublin | nFkybEld8B0 | Naomi Hutchinson |
+| Why Ireland 3 | Samuel Beckett Bridge, Dublin | Z6t2-hfunng | Carlos Torres |
+| Why Ireland 4 | Grand Canal Dock, Dublin | w9OaYkcIQuU | Margaux Bebin |
+| Why Ireland 5 | Temple Bar, Dublin | XMi6Gbu9KIQ | Genny Dimitrakopoulou |
+| Services: consultation | Friends at a café | -uHVRvDr7pg | Brooke Cagle |
+| Services: post-landing | River Liffey at dusk | xBUVF06tUoI | Nistala Maneesh |
+| Free counselling | Students at a table | g1Kr4Ozfoac | Brooke Cagle |
+
+Each is viewable at `https://unsplash.com/photos/<id>`. To self-host instead, download each at
+roughly 2000px wide, save under this folder, swap the `src` URLs, and `images.unsplash.com` can be
+dropped from the CSP.
+
+
+Every Why Ireland photo was checked against the location recorded on its Unsplash page: all five are
+in Ireland (University College Cork, and four Dublin locations).
+
+
+No free, camera-shot video of this exact sunset view exists on Pexels, Pixabay, Unsplash, Vecteezy,
+Mixkit or Wikimedia Commons (checked October 2026); the close free matches on Vecteezy are flagged
+as AI-generated. The hero therefore animates the photograph itself: a WebGL shader moves only the sea, sky and grass
+regions of this one photo. No other imagery is generated or added.

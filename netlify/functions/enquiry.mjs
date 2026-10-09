@@ -81,6 +81,7 @@ const COUNTRY_ALIASES = {
 
 const FIELD_LIMITS = {
   name: 120, email: 200, phone: 40, destination: 600, subject: 200, from_name: 120,
+  note: 250, preferred_colleges: 1200,
 };
 
 // Fields this handler consumes by name. Anything else the form grows later is
@@ -89,7 +90,7 @@ const FIELD_LIMITS = {
 // because this file has not been updated to know about it.
 const KNOWN_FIELDS = new Set(['name', 'email', 'phone', 'phone_number',
   'country_code', 'destination', 'from_name', 'page', 'botcheck',
-  'access_key', 'subject']);
+  'access_key', 'subject', 'note', 'preferred_colleges']);
 const MAX_EXTRA_FIELDS = 12;
 
 /** Collapse whitespace and strip CR/LF.
@@ -163,6 +164,11 @@ export function parsePayload(raw) {
     destination: clean(data.destination, FIELD_LIMITS.destination) || 'General Inquiry',
     from_name: clean(data.from_name, FIELD_LIMITS.from_name) || 'Tutee Connect Website',
     page: clean(data.page, 200),
+    // The note keeps its line breaks: it only ever reaches the message body,
+    // never a header. Control characters other than newlines are dropped.
+    note: String(data.note ?? '').replace(/\r\n?/g, '\n').replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, '')
+      .replace(/\n{3,}/g, '\n\n').trim().slice(0, FIELD_LIMITS.note),
+    colleges: clean(data.preferred_colleges, FIELD_LIMITS.preferred_colleges),
     extras,
     botcheck: data.botcheck,
   };
@@ -198,6 +204,8 @@ export function buildEmail(f, country) {
     ['Email Address', f.email],
     ['Enquiry Type / Country', f.destination],
   ];
+  if (f.colleges) rows.push(['Preferred Colleges', f.colleges]);
+  if (f.note) rows.push(['Note from Student', f.note]);
   if (country) rows.push(['Landing Page', country]);
   if (f.page) rows.push(['Submitted From', f.page]);
   rows.push(...f.extras);
@@ -212,7 +220,7 @@ export function buildEmail(f, country) {
     '<tr>'
     + '<td style="padding:8px 14px;border:1px solid #e5e7eb;background:#f9fafb;'
     + `font-weight:600;white-space:nowrap">${esc(label)}</td>`
-    + `<td style="padding:8px 14px;border:1px solid #e5e7eb">${esc(value)}</td>`
+    + `<td style="padding:8px 14px;border:1px solid #e5e7eb">${esc(value).replace(/\n/g, '<br>')}</td>`
     + '</tr>').join('');
 
   const html = '<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;color:#111827">'

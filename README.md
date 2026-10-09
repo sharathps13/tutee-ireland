@@ -1,79 +1,64 @@
 # Tutee Connect — Ireland landing page
 
-A static clone of the reference site <https://pageus.netlify.app/#/> with the content localised to
-Ireland. Same layout, same compiled Tailwind stylesheet, same animations — only the copy, the
-photographs, the currency glyph and the institution dataset are Irish.
+The Ireland study-abroad landing page and its university directory. Hand-written static HTML, CSS
+and vanilla JS: no framework, no build step.
+
+## Design
+
+The page is a **route map**. Its palette joins the Irish tricolour (shamrock green, white, orange)
+to the Tutee Connect mark (deep teal and claret rings, gold eagle): forest `#0c3a33`, shamrock
+`#169b62`, amber `#f2922b`, gold `#f9c74f`, claret `#7a1414` on mist `#eff4ee`. Headings use
+Bricolage Grotesque (Google Fonts); body copy uses the self-hosted Quicksand.
+
+| Section | Layout and motion |
+| --- | --- |
+| Hero | The Cliffs of Moher sunset photo as a WebGL cinemagraph (`assets/js/hero-fx.js`): the sea swells shorewards in perspective and glitters where the sun hits it, foam breathes at the cliff foot, clouds drift and reshape (slower near the horizon), the foreground grass sways in gusts, and the low sun glows. Cliffs, sea stack, tower and beach stay perfectly still, using sea, sky and grass masks computed from the photo's own colours at load time. Runs at 30 fps, pauses off-screen, and falls back to the still photo without WebGL, with reduced motion or with data saver. A deck of seven polaroids sits alongside. |
+| Marquee band | Tricolour-edged ticker of the 12 ranked universities. |
+| Why Ireland | Five photo panels, all photographed in Ireland, that expand on hover or tap and auto-cycle (with a progress bar) until the visitor takes over. |
+| What we do | Bento grid of the nine services: photo tiles, colour tiles, 3D tilt and a cursor spotlight. Any tile opens a detail dialog (bottom sheet on phones) with previous/next. |
+| Universities | Airport departures board of the 12 ranked universities with split-flap codes; picking a row flips the boarding pass beside it, whose button pre-fills the counselling form. The pass's departure code is the visitor's country, guessed from the browser's time zone (no network lookup), falling back to IND or UAE. |
+| Funding | Three tabs: scholarships, loans with partner logos, part-time work with an interactive hours planner. |
+| Settle | Four-stop route that draws on scroll. Tapping a stop flies a pin along the line and opens its details: what it is, key facts, how we help. |
+| Stories | Two counter-scrolling rows of testimonials that pause on hover. |
+| FAQ | Pick a question on the left and its answer card swaps in on the right, with previous/next buttons. The Tutee AI chatbot lives only behind its button at the bottom right. |
+| Free counselling | A two-step boarding-pass check-in: the stub previews the passenger name and topic live, a plane flies from the visitor's country to DUB as fields are filled, and a "Checked in" stamp lands on success. |
+
+Sections overlap like stacked sheets, the header hides on scroll down, and a route-line rail on the
+right (desktop) or a tricolour progress bar (mobile) shows where you are and how much is left.
+Everything respects `prefers-reduced-motion`.
+
+`universities.html` opens on an Ireland map that draws itself; each town is a pulsing dot sized by
+its number of institutions, and clicking one filters the directory. Type chips (with live counts),
+sort, grid/list view, a shortlist tray and an apply modal complete it.
+
+**No monetary amounts appear anywhere** on the site, including the chatbot replies. Keep it that
+way when editing copy.
 
 ## Files
 
 ```
-index.html               the landing page          (generated — do not hand-edit)
-universities.html        the institution directory (generated — do not hand-edit)
-assets/css/main.css      the reference site's compiled Tailwind output, shipped verbatim
-assets/css/quicksand.css the webfont, self-hosted
-assets/fonts/            Quicksand woff2 subsets
-assets/img/logo/         Tutee Connect logo + favicon
-assets/img/loan-partner/ the ten Indian education-loan partner logos
-assets/img/photos/       the four Irish photographs + CREDITS.md
-api/enquiry.py           serverless function: emails enquiries to business@tuteeconnect.com
-assets/js/main.js        every interaction: nav, tabs, carousels, FAQ, forms, chat, directory
-assets/js/services-data.js   the nine service tabs
+index.html                      landing page
+universities.html               institution directory
+assets/css/site.css             all styles
+assets/css/quicksand.css        body webfont, self-hosted
+assets/js/boot.js               sets the `js` class before first paint (CSP forbids inline scripts)
+assets/js/hero-fx.js            the living hero photo (WebGL cinemagraph); window.TC_heroFx.snapshot(t) renders a frame for inspection
+assets/js/main.js               every interaction on both pages
+assets/js/services-data.js      the nine services (title, tagline, icon id, description)
 assets/js/universities-data.js  113 institutions from Ireland's official registers
-serve.py                 local preview server
-Start Local Server.command   double-clickable wrapper for serve.py
+assets/js/supabase-*.js         optional live copy of the dataset, bundled file as fallback
+assets/img/                     logo, loan-partner logos, CC-BY photos + CREDITS.md
+netlify/functions/enquiry.mjs   emails enquiries; both forms and the chatbot post to /api/enquiry
 ```
 
-## How it was built
+The two pages share the header, footer, chat and icon sprite by copy. If you change one, change the
+other.
 
-Everything is generated by the shared toolchain in `../_tooling`. The reference site is a React
-SPA; its rendered DOM was captured once so the markup and every Tailwind class match the original
-exactly, and the compiled stylesheet is shipped as-is — which means **a class only works if it is
-already in that CSS**.
-
-```
-reference DOM  ->  _tooling/fragments-uk/     (the UK section fragments)
-                     |  localise_ie.py        (whole-text-node replacements, Irish copy)
-                     v
-               _tooling/fragments-ireland/
-                     |  assemble.py ireland   (stitches sections, injects the data-* hooks)
-                     |  build_unipage.py ireland
-                     v
-               IRELAND/index.html + universities.html
-```
-
-`localise_ie.py` also generates this folder's `main.js` and `services-data.js` from the UK
-originals, because their copy is part of the page even though it isn't in the HTML.
-
-Fidelity is enforced, not hoped for. `localise_ie.py` diffs the tag+class skeleton of every fragment
-against its UK input and refuses to write if anything moved. The built result was then diffed
-against the UK page: `universities.html` is structurally identical, and `index.html` differs by
-exactly **two** elements — the two lucide `circle-pound-sterling` glyphs replaced by
-`circle-euro`, which has one fewer `<path>` — plus the city-image class token. Nothing else in the
-DOM changed. `.reveal` count (42), `transition-delay` stagger (24), `animate-fade-in`,
-`animate-bounce`, `animate-marquee` and `animate-float` counts all match the UK and Canada pages
-exactly, and the IntersectionObserver code in `main.js` is untouched.
-
-## Three deliberate divergences from the UK page
-
-1. **The euro glyph.** The UK build swaps the reference's lucide dollar icons for
-   `circle-pound-sterling`; Ireland sets `swap_currency='euro'` and gets `circle-euro`. A `$` or a
-   `£` on an Irish page reads as an error, so `verify_site.py` treats both as leaks.
-
-2. **`programmes` replaces the UK page's `offerRate`.** The UK dataset's `offerRate` is a
-   fabricated placeholder and is still flagged as a launch risk in `../UK/README.md`. Ireland ships
-   a real number instead: the count of that provider's eligible programmes on the official
-   registers, rendered as "Eligible courses: 1,655". Read it as breadth of choice on the register —
-   **not** as a quality score, an enrolment figure, or a size comparison, since providers itemise
-   their awards at very different granularities.
-
-3. **Students cannot bring dependants, and the page says so.** This is the one place where the
-   reference's own pitch is not available in Ireland. Immigration Service Delivery states that
-   "students are typically not permitted to bring family members with them", with only very
-   exceptional cases. Rather than quietly keeping the UK promise, the `relocate` section and FAQ Q4
-   say plainly that family reunification arrives at the work-permit stage — a Critical Skills
-   Employment Permit carries **immediate** family reunification, and the partner can then take any
-   job on a free Dependant/Partner/Spouse permit. Do not "fix" this back to a student dependant
-   visa; there isn't one.
+Most photographs are hot-linked from Unsplash (`images.unsplash.com`) under the Unsplash License,
+which allows free commercial use with no attribution required; the list is in
+`assets/img/photos/CREDITS.md`. The CSP in `netlify.toml` allows that host for images, plus
+`fonts.googleapis.com` / `fonts.gstatic.com` for the Bricolage Grotesque and Caveat fonts. Scripts
+remain same-origin only.
 
 ## The institution dataset
 
@@ -104,15 +89,12 @@ names; `University` is the seven Irish Universities Association members.
 ## Things to review before launch
 
 - **Re-check the immigration facts.** They were read from the official source on 2026-08-24 and all
-  of them move. The full list, with sources, is at the end of `_tooling/IRELAND_SPEC.md`: Stamp 2
-  work rights (20 h term time, 40 h in June–September and 15 Dec–15 Jan), the €10,000 proof of
-  funds per academic year on top of fees, the €300 registration fee, Third Level Graduate Programme
-  durations (12 months at NFQ Level 8, up to 24 at Level 9+), and the Critical Skills Employment
-  Permit route to Stamp 4.
+  of them move: Stamp 2 work rights (20 h term time, 40 h in June–September and 15 Dec–15 Jan),
+  Third Level Graduate Programme durations (12 months at NFQ Level 8, up to 24 at Level 9+), the
+  90-day residence-permit registration, and the Critical Skills Employment Permit route to Stamp 4.
+  The page deliberately quotes no fees, fund thresholds or wages.
 - **Re-pull the registers** before launch and re-run `build_dataset_ie.py`. The ILEP is explicitly
   *interim* and TrustEd Ireland is actively replacing it; provider lists change monthly.
-- **The `€14–€17+/hr` wage band** is grounded on the statutory minimum wage of €14.15/hr from
-  1 January 2026, but the upper figure is a marketing claim, not a measured average.
 - **`200+` Ireland Tie-ups, `99%` success rate, `5k+` students** are the client's own marketing
   claims carried over from the reference site. Confirm the client stands behind them for Ireland.
 - **Photo attributions are mandatory.** All four photographs are CC-BY (none is CC0, unlike the
@@ -144,27 +126,12 @@ Double-click `index.html`. Every path is relative so this works fine. The one di
 `/api/enquiry` does not exist without a server, so form submissions fail — so test **real
 form submissions over the server**.
 
-### Rebuilding
-
-```bash
-cd "/Users/tuteeconnect/Landing Page/_tooling"
-python3 build_dataset_ie.py      # regenerate universities-data.js from the register snapshots
-python3 localise_ie.py           # regenerate fragments-ireland/ + main.js + services-data.js
-python3 assemble.py ireland      # rebuild IRELAND/index.html
-python3 build_unipage.py ireland # rebuild IRELAND/universities.html
-python3 verify_site.py ireland   # check the result
-```
-
-**Never hand-edit `index.html`, `universities.html`, `main.js` or `services-data.js`** — the next
-build overwrites them. Edit the `localise_ie.py` replacement that produces them.
-
 ### A note on checking the reveal animations in a browser
 
-The `.reveal` scroll animation is driven by `IntersectionObserver`, which **does not fire in a
+The scroll reveals are driven by `IntersectionObserver`, which **does not fire in a
 hidden or backgrounded browser tab**, and CSS transitions are frozen there too. If the reveals look
-broken while automating a browser, check `document.visibilityState` before believing it — the UK
-page behaves identically under the same conditions. To screenshot the sections, inject
-`.reveal{opacity:1;transform:none}` into a throwaway copy.
+broken while automating a browser, check `document.visibilityState` before believing it — To screenshot the sections, inject
+`[data-reveal]{opacity:1!important;transform:none!important;clip-path:none!important}` into a throwaway copy.
 
 ### Deploying
 
