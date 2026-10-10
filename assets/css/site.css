@@ -1708,4 +1708,10 @@ body.has-tray .dock { bottom: 92px; }
 }
 @media (max-width: 640px) {
   .dock { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(255,255,255,.985); }
+  /* Own compositor layer so the bar moves with the browser toolbar instead of
+     repainting a frame late; JS (initDockPin) nudges it up if it ever lags. */
+  /* No overscroll stretch/bounce at the page edges: it stretches the whole
+     screen, fixed bar included, and pushes the bar partly off the bottom. */
+  html, body { overscroll-behavior-y: none; }
+  .dock { transform: translate3d(0,0,0); will-change: transform; -webkit-backface-visibility: hidden; backface-visibility: hidden; transition: none; }
 }

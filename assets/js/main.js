@@ -1793,6 +1793,28 @@
     return "Great question! Studying in Ireland has a lot of moving parts (admissions, Letter of Acceptance, AVATS, proof of funds, loans), and our experts at Tutee Connect will work through every detail with you.";
   }
 
+  /* Phones: keep the quick-contact bar on the visible bottom edge. When the
+     browser's own toolbar slides back in on scroll-up, the layout viewport
+     can lag behind what is on screen and tuck the bar under the toolbar;
+     the visual viewport always reports the real visible area. */
+  function initDockPin() {
+    var dock = $('.dock'), vv = window.visualViewport;
+    if (!dock || !vv) return;
+    var phone = window.matchMedia('(max-width: 640px)');
+    var queued = false;
+    function pin() {
+      queued = false;
+      var gap = phone.matches ? Math.max(0, Math.round(window.innerHeight - (vv.height + vv.offsetTop))) : 0;
+      dock.style.transform = gap ? 'translate3d(0,' + -gap + 'px,0)' : '';
+    }
+    function queue() { if (!queued) { queued = true; requestAnimationFrame(pin); } }
+    vv.addEventListener('resize', queue);
+    vv.addEventListener('scroll', queue);
+    window.addEventListener('scroll', queue, { passive: true });
+    window.addEventListener('resize', queue);
+    pin();
+  }
+
   function initChat() {
     var panel = $('[data-chat]');
     var launcher = $('[data-chat-open]');
@@ -2256,6 +2278,7 @@
   initTopics();
   initCheckin();
   initChat();
+  initDockPin();
   initDirectory();
   initScrollEngine();
 
