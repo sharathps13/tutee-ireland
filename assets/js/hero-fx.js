@@ -69,10 +69,28 @@
   function sstep(a, b, v) { var t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); }
   function horizon(x) { return 0.345 + (1 - x) * 0.012; }
 
+  // Hand control back to the browser between heavy steps, so scrolling and
+  // taps stay responsive while the masks are built.
+  function yieldNow() {
+    return new Promise(function (r) {
+      if (window.scheduler && scheduler.yield) scheduler.yield().then(r);
+      else setTimeout(r, 0);
+    });
+  }
+
+  // Built in slices of rows, yielding between slices and between filter
+  // passes: one long block here used to freeze the page for over a second.
   function buildMask(rgba, w, h) {
-    var n = w * h;
+    var n = w * h, s = w / 600;                 // filter radii were tuned at 600px wide
+    var R = function (r) { return Math.max(1, Math.round(r * s)); };
     var sea = new Float32Array(n), sky = new Float32Array(n), grass = new Float32Array(n);
-    for (var py = 0; py < h; py++) {
+    var row = 0, ROWS = 24;
+    function rows() {
+      var end = Math.min(h, row + ROWS);
+      for (; row < end; row++) classifyRow(row);
+      return row < h ? yieldNow().then(rows) : null;
+    }
+    function classifyRow(py) {
       var y = (py + 0.5) / h;
       for (var px = 0; px < w; px++) {
         var x = (px + 0.5) / w, k = py * w + px, i = k * 4;
@@ -98,21 +116,31 @@
         }
       }
     }
-    // Close small holes (shadows in the grass, dark troughs in the water),
-    // then soften every edge.
-    close(sea, w, h, 3); close(grass, w, h, 3);
-    // Pull the moving sky back from the cliff tops so the sunlit rim of rock
-    // never shimmers.
-    sky.set(pass(pass(sky, w, h, 5, true, 'min'), w, h, 5, false, 'min'));
-    [sea, sky, grass].forEach(function (c) { boxBlur(c, w, h, 2); boxBlur(c, w, h, 2); });
-    var out = new Uint8Array(n * 4);
-    for (var j = 0; j < n; j++) {
-      out[j * 4] = Math.round(sea[j] * 255);
-      out[j * 4 + 1] = Math.round(sky[j] * 255);
-      out[j * 4 + 2] = Math.round(grass[j] * 255);
-      out[j * 4 + 3] = 255;
+    // Each remaining step is one short task; the browser gets a turn between them.
+    var steps = [
+      // Close small holes (shadows in the grass, dark troughs in the water),
+      // then soften every edge.
+      function () { close(sea, w, h, R(3)); },
+      function () { close(grass, w, h, R(3)); },
+      // Pull the moving sky back from the cliff tops so the sunlit rim of rock
+      // never shimmers.
+      function () { sky.set(pass(pass(sky, w, h, R(5), true, 'min'), w, h, R(5), false, 'min')); },
+      function () { boxBlur(sea, w, h, R(2)); boxBlur(sea, w, h, R(2)); },
+      function () { boxBlur(sky, w, h, R(2)); boxBlur(sky, w, h, R(2)); },
+      function () { boxBlur(grass, w, h, R(2)); boxBlur(grass, w, h, R(2)); }
+    ];
+    function next() {
+      if (steps.length) { steps.shift()(); return yieldNow().then(next); }
+      var out = new Uint8Array(n * 4);
+      for (var j = 0; j < n; j++) {
+        out[j * 4] = Math.round(sea[j] * 255);
+        out[j * 4 + 1] = Math.round(sky[j] * 255);
+        out[j * 4 + 2] = Math.round(grass[j] * 255);
+        out[j * 4 + 3] = 255;
+      }
+      return out;
     }
-    return out;
+    return Promise.resolve().then(rows).then(next);
   }
 
   function pass(src, w, h, rad, horiz, pick) {
@@ -268,32 +296,47 @@
            canvas.getContext('experimental-webgl');
   if (!gl) return;
 
+  // Compile and link are only queued here. Asking for COMPILE_STATUS or
+  // LINK_STATUS straight away makes the page wait for the GPU driver to finish
+  // compiling this large shader, which froze it for about a second. With
+  // KHR_parallel_shader_compile we poll once a frame until the driver is done.
   function shader(type, src) {
     var s = gl.createShader(type);
     gl.shaderSource(s, src); gl.compileShader(s);
-    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { if (window.console) console.warn(gl.getShaderInfoLog(s)); return null; }
     return s;
   }
   var vs = shader(gl.VERTEX_SHADER, VS), fs = shader(gl.FRAGMENT_SHADER, FS);
-  if (!vs || !fs) return;
   var prog = gl.createProgram();
   gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
-  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return;
-  gl.useProgram(prog);
+  var parallel = gl.getExtension('KHR_parallel_shader_compile');
 
-  var buf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
-  var aPos = gl.getAttribLocation(prog, 'aPos');
-  gl.enableVertexAttribArray(aPos);
-  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+  function whenLinked() {
+    return new Promise(function (resolve) {
+      (function check() {
+        if (parallel && !gl.getProgramParameter(prog, parallel.COMPLETION_STATUS_KHR)) { requestAnimationFrame(check); return; }
+        var ok = gl.getProgramParameter(prog, gl.LINK_STATUS);
+        if (!ok && window.console) console.warn(gl.getShaderInfoLog(fs) || gl.getProgramInfoLog(prog));
+        resolve(ok);
+      })();
+    });
+  }
 
   var U = {};
-  ['uImg', 'uMask', 'uRes', 'uTime', 'uAspect', 'uPos', 'uFocus', 'uZoom'].forEach(function (n) { U[n] = gl.getUniformLocation(prog, n); });
-  gl.uniform1i(U.uImg, 0); gl.uniform1i(U.uMask, 1);
-  gl.uniform1f(U.uAspect, ASPECT);
-  gl.uniform2f(U.uPos, POS[0], POS[1]);
-  gl.uniform2f(U.uFocus, FOCUS[0], FOCUS[1]);
+  function setupProgram() {
+    gl.useProgram(prog);
+    var buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+    var aPos = gl.getAttribLocation(prog, 'aPos');
+    gl.enableVertexAttribArray(aPos);
+    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+    ['uImg', 'uMask', 'uRes', 'uTime', 'uAspect', 'uPos', 'uFocus', 'uZoom'].forEach(function (n) { U[n] = gl.getUniformLocation(prog, n); });
+    gl.uniform1i(U.uImg, 0); gl.uniform1i(U.uMask, 1);
+    gl.uniform1f(U.uAspect, ASPECT);
+    gl.uniform2f(U.uPos, POS[0], POS[1]);
+    gl.uniform2f(U.uFocus, FOCUS[0], FOCUS[1]);
+    gl.uniform2f(U.uRes, canvas.width, canvas.height);
+  }
 
   function texture(unit) {
     var tx = gl.createTexture();
@@ -306,17 +349,30 @@
     return tx;
   }
 
-  var dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+  // Touch devices get a smaller drawing buffer: the photo sits under a shade and
+  // moves slowly, so the softer canvas is invisible but the GPU saving is not.
+  var coarse = window.matchMedia('(pointer: coarse)').matches;
+  var dpr = Math.min(window.devicePixelRatio || 1, coarse ? 1 : 1.5);
+  var BUDGET = coarse ? 900000 : 2400000;
+  // The host's size is cached and refreshed by a ResizeObserver: reading
+  // clientWidth inside the 30 fps draw loop forced a layout on every frame.
+  var hostW = host.clientWidth, hostH = host.clientHeight;
+  if ('ResizeObserver' in window) {
+    new ResizeObserver(function (en) {
+      var r = en[0].contentRect; hostW = r.width; hostH = r.height;
+    }).observe(host);
+  }
   function size() {
-    var w = Math.max(1, Math.round(host.clientWidth * dpr));
-    var h = Math.max(1, Math.round(host.clientHeight * dpr));
+    if (!('ResizeObserver' in window)) { hostW = host.clientWidth; hostH = host.clientHeight; }
+    var w = Math.max(1, Math.round(hostW * dpr));
+    var h = Math.max(1, Math.round(hostH * dpr));
     // keep the pixel budget sane on very large screens
-    var scale = Math.min(1, Math.sqrt(2400000 / (w * h)));
+    var scale = Math.min(1, Math.sqrt(BUDGET / (w * h)));
     w = Math.round(w * scale); h = Math.round(h * scale);
     if (canvas.width !== w || canvas.height !== h) {
       canvas.width = w; canvas.height = h;
       gl.viewport(0, 0, w, h);
-      gl.uniform2f(U.uRes, w, h);
+      if (U.uRes) gl.uniform2f(U.uRes, w, h);
     }
     return { w: w, h: h };
   }
@@ -332,25 +388,40 @@
   var img = new Image();
   img.crossOrigin = 'anonymous';
   img.decoding = 'async';
-  img.src = PHOTO + width;
-  img.onload = function () {
-    try {
+
+  // Nothing here is needed for the first paint (the still photo is already on
+  // screen), so it waits until the page has loaded and the browser is idle.
+  function whenIdle(fn) {
+    var go = function () { ('requestIdleCallback' in window) ? requestIdleCallback(fn, { timeout: 2000 }) : setTimeout(fn, 300); };
+    if (document.readyState === 'complete') go(); else window.addEventListener('load', go, { once: true });
+  }
+
+  function prepare() {
+    // Decode off the main thread first, so the GPU upload is a quick copy.
+    var decoded = window.createImageBitmap ? createImageBitmap(img).catch(function () { return img; }) : Promise.resolve(img);
+    var MW = 360, MH = Math.round(MW / ASPECT);   // the mask is blurred anyway; 360px is plenty
+    whenLinked().then(function (ok) {
+      if (!ok) throw new Error('shader');
+      setupProgram();
+      return decoded;
+    }).then(function (src) {
       texture(0);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, img);
-      var mw = 600, mh = Math.round(600 / ASPECT);
-      var c = document.createElement('canvas'); c.width = mw; c.height = mh;
-      var cx = c.getContext('2d');
-      cx.drawImage(img, 0, 0, mw, mh);
-      var mask = buildMask(cx.getImageData(0, 0, mw, mh).data, mw, mh);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, src);
+      var c = document.createElement('canvas'); c.width = MW; c.height = MH;
+      var cx = c.getContext('2d', { willReadFrequently: true });
+      cx.drawImage(src, 0, 0, MW, MH);
+      var data = cx.getImageData(0, 0, MW, MH).data;
+      return yieldNow().then(function () { return buildMask(data, MW, MH); });
+    }).then(function (mask) {
       texture(1);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, mw, mh, 0, gl.RGBA, gl.UNSIGNED_BYTE, mask);
-    } catch (e) {
-      // cross-origin or GPU trouble: keep the still photo
-      return;
-    }
-    host.appendChild(canvas);
-    start();
-  };
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, MW, MH, 0, gl.RGBA, gl.UNSIGNED_BYTE, mask);
+      host.appendChild(canvas);
+      start();
+    }).catch(function () { /* cross-origin or GPU trouble: keep the still photo */ });
+  }
+
+  img.onload = function () { whenIdle(prepare); };
+  whenIdle(function () { img.src = PHOTO + width; });
 
   var running = false, visible = true, raf = 0, t0 = performance.now();
   function draw(t) {

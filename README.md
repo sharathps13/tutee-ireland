@@ -15,13 +15,18 @@ Bricolage Grotesque (Google Fonts); body copy uses the self-hosted Quicksand.
 | Hero | The Cliffs of Moher sunset photo as a WebGL cinemagraph (`assets/js/hero-fx.js`): the sea swells shorewards in perspective and glitters where the sun hits it, foam breathes at the cliff foot, clouds drift and reshape (slower near the horizon), the foreground grass sways in gusts, and the low sun glows. Cliffs, sea stack, tower and beach stay perfectly still, using sea, sky and grass masks computed from the photo's own colours at load time. Runs at 30 fps, pauses off-screen, and falls back to the still photo without WebGL, with reduced motion or with data saver. A deck of seven polaroids sits alongside. |
 | Marquee band | Tricolour-edged ticker of the 12 ranked universities. |
 | Why Ireland | Five photo panels, all photographed in Ireland, that expand on hover or tap and auto-cycle (with a progress bar) until the visitor takes over. |
-| What we do | Bento grid of the nine services: photo tiles, colour tiles, 3D tilt and a cursor spotlight. Any tile opens a detail dialog (bottom sheet on phones) with previous/next. |
+| Live news | Ticker of current Ireland study, visa and career headlines from `/api/news` (`netlify/functions/news.mjs`, mirrored in `serve.py`). It reads Google News RSS in five topic searches and keeps only headlines that are about Ireland and on topic, dropping UK and Northern Ireland stories, crime and court stories, and any monetary amounts. It falls back to four official links when the feed is unavailable or the page is opened from disk. |
+| What we do | Bento grid of the nine services: every tile is a photo of its service, tinted in the tile's colour, with 3D tilt and a cursor spotlight. Any tile opens a detail dialog (bottom sheet on phones) with previous/next. |
 | Universities | Airport departures board of the 12 ranked universities with split-flap codes; picking a row flips the boarding pass beside it, whose button pre-fills the counselling form. The pass's departure code is the visitor's country, guessed from the browser's time zone (no network lookup), falling back to IND or UAE. |
 | Funding | Three tabs: scholarships, loans with partner logos, part-time work with an interactive hours planner. |
 | Settle | Four-stop route that draws on scroll. Tapping a stop flies a pin along the line and opens its details: what it is, key facts, how we help. |
 | Stories | Two counter-scrolling rows of testimonials that pause on hover. |
 | FAQ | Pick a question on the left and its answer card swaps in on the right, with previous/next buttons. The Tutee AI chatbot lives only behind its button at the bottom right. |
 | Free counselling | A two-step boarding-pass check-in: the stub previews the passenger name and topic live, a plane flies from the visitor's country to DUB as fields are filled, and a "Checked in" stamp lands on success. |
+
+A quick-contact dock sits on both pages: Ask Tutee AI (bottom-left), Reserve a call (scrolls to Free
+counselling) and WhatsApp (+91 73583 64959) bottom-right. On phones the three share one slim bar fixed
+to the bottom of the screen, and the page ends with matching padding so the bar never covers content.
 
 Sections overlap like stacked sheets, the header hides on scroll down, and a route-line rail on the
 right (desktop) or a tricolour progress bar (mobile) shows where you are and how much is left.
@@ -47,7 +52,20 @@ assets/js/main.js               every interaction on both pages
 assets/js/services-data.js      the nine services (title, tagline, icon id, description)
 assets/js/universities-data.js  113 institutions from Ireland's official registers
 assets/js/supabase-*.js         optional live copy of the dataset, bundled file as fallback
-assets/img/                     logo, loan-partner logos, CC-BY photos + CREDITS.md
+assets/img/logo/master/         the client's master logo files; everything else in logo/ is made from them
+assets/img/logo/                logo.webp (transparent, original colours);
+                                logo-footer-{76,152,228}h.webp: the client's on-dark logo
+                                (master/tutee-connect-logo-on-dark.webp) lifted off its teal backdrop,
+                                1x/2x/3x, used in the footer;
+                                icon-{44,88,132}.png and icon-dark-{44,88,132}.png: the symbol at exact
+                                display sizes (the dark one has cream between the rings, for the dark
+                                chat button and chat header); icon.png (symbol, transparent);
+                                favicon* + apple-touch-icon (symbol in a white circle: the only place
+                                the logo has a white backing); share.png
+                                The header shows the symbol as an image and the wordmark as live text in
+                                Alegreya (the logo's typeface, colours #054041 / #8c0304), so it is sharp
+                                at any size: see .header__logo / .wordmark in site.css.
+assets/img/                     loan-partner logos, CC-BY photos + CREDITS.md
 netlify/functions/enquiry.mjs   emails enquiries; both forms and the chatbot post to /api/enquiry
 ```
 
@@ -59,6 +77,26 @@ which allows free commercial use with no attribution required; the list is in
 `assets/img/photos/CREDITS.md`. The CSP in `netlify.toml` allows that host for images, plus
 `fonts.googleapis.com` / `fonts.gstatic.com` for the Bricolage Grotesque and Caveat fonts. Scripts
 remain same-origin only.
+
+## Performance rules
+
+Stress-tested in headless Chrome at 1920×1080, 1440×900 @2x, 1024×768, and phones at 4× and 6×
+CPU slowdown on throttled 4G. Keep these when editing, or the jank comes back:
+
+- **Scroll handlers never read layout.** `main.js` splits scroll work into `onMeasure` (reads page
+  offsets, run only on resize, load, fonts, and page-height changes) and `onScrollFrame` (compares
+  `scrollY` with the cached numbers and writes only when a value changes). Never call
+  `getBoundingClientRect`/`offsetHeight` inside an `onScrollFrame`.
+- **Nothing scroll-driven writes to `:root`.** A custom property on the root restyles the whole page;
+  the progress bar and rail fill set their own `transform`.
+- **Infinite animations use `transform`/`opacity` only**, and every section pauses its animations
+  while off screen (`.is-offscreen`). SVG stroke or `box-shadow` animations repaint every frame.
+- **No `backdrop-filter` on things that move with the page** or sit over the live hero; phones also
+  drop it from the fixed header, dock and filter bar.
+- **The hero canvas starts when the browser is idle:** its shader compiles in parallel
+  (`KHR_parallel_shader_compile`), and its masks are built in small slices that yield to the browser.
+- **Photos carry `srcset`/`sizes` and `decoding="async"`**, so phones fetch small files and decoding
+  never holds up a frame.
 
 ## The institution dataset
 

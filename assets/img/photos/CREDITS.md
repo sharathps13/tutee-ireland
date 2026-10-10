@@ -194,6 +194,13 @@ still used, so the footer credit line names only those two. `students-campus.jpg
 | Why Ireland 5 | Temple Bar, Dublin | XMi6Gbu9KIQ | Genny Dimitrakopoulou |
 | Services: consultation | Friends at a café | -uHVRvDr7pg | Brooke Cagle |
 | Services: post-landing | River Liffey at dusk | xBUVF06tUoI | Nistala Maneesh |
+| Services: language test | Student in headphones at a laptop | 4JFBqeP3VRQ | Vitaly Gariev |
+| Services: college selection | Front Square, Trinity College Dublin | FIuPkfo4LoU | Help Stay |
+| Services: documentation | Hand signing papers | OQMZwNd3ThU | Scott Graham |
+| Services: study visa | Passport and boarding pass | LVA3S6isNYQ | CardMapr.nl |
+| Services: settlement | Georgian front door, Dublin | G196ZC3NXUQ | Jonathan Borba |
+| Services: financial aid | Calculator on paperwork | 8wLZi9OhsWU | Jakub Żerdzicki |
+| Services: family migration | Father and daughter at an airport gate | m8TQz6FRrUk | Rochelle Lee |
 | Free counselling | Students at a table | g1Kr4Ozfoac | Brooke Cagle |
 
 Each is viewable at `https://unsplash.com/photos/<id>`. To self-host instead, download each at

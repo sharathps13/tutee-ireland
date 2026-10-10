@@ -160,59 +160,90 @@
   /* ------------------------------------------------------------------ *
    * The scroll engine — one rAF loop drives every scroll-linked effect
    * ------------------------------------------------------------------ */
-  var scrollers = [];
+  /* Two phases, so a scroll frame never forces a layout:
+       measure  - read geometry (page offsets, heights) into caches. Runs only
+                  when the layout can have changed: resize, load, fonts, and
+                  whenever the page's height changes.
+       frame    - per scroll frame, compare scrollY with the cached numbers and
+                  write classes/styles, only when a value actually changes. */
+  var scrollers = [], measurers = [];
   function onScrollFrame(fn) { scrollers.push(fn); }
+  function onMeasure(fn) { measurers.push(fn); }
+  function pageTop(el) { return el.getBoundingClientRect().top + window.scrollY; }
+  function setClass(el, cls, on) { if (el.classList.contains(cls) !== on) el.classList.toggle(cls, on); }
   function initScrollEngine() {
-    var ticking = false;
+    var ticking = false, dirty = true;
     function run() {
       ticking = false;
+      if (dirty) { dirty = false; for (var m = 0; m < measurers.length; m++) measurers[m](); }
       var y = window.scrollY, vh = window.innerHeight;
       for (var i = 0; i < scrollers.length; i++) scrollers[i](y, vh);
     }
     function req() { if (!ticking) { ticking = true; requestAnimationFrame(run); } }
+    function remeasure() { dirty = true; req(); }
+    // Page-height changes can arrive in bursts (images, reveals, accordions):
+    // measure at most every 200 ms for those.
+    var settleT = 0;
+    function remeasureSoon() { if (!settleT) settleT = setTimeout(function () { settleT = 0; remeasure(); }, 200); }
     window.addEventListener('scroll', req, { passive: true });
-    window.addEventListener('resize', req);
-    window.addEventListener('load', req);
-    run();
+    window.addEventListener('resize', remeasure);
+    window.addEventListener('load', remeasure);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(remeasure);
+    // lazy images, the FAQ accordion, passes opening: anything that changes the page's height
+    if ('ResizeObserver' in window) new ResizeObserver(remeasureSoon).observe(document.body);
+    // First pass on the next frame, after the browser's own first layout and
+    // paint, instead of forcing that layout during start-up.
+    req();
   }
 
   function initHeaderScroll() {
     var header = $('[data-header]');
     if (!header) return;
-    var last = 0;
+    var last = 0, hidden = false;
     onScrollFrame(function (y) {
-      header.classList.toggle('is-scrolled', y > 20);
+      setClass(header, 'is-scrolled', y > 20);
       var goingDown = y > last + 4, goingUp = y < last - 4;
-      if (goingDown && y > 500 && !document.body.style.overflow) header.classList.add('is-hidden');
-      else if (goingUp || y < 200) header.classList.remove('is-hidden');
-      document.body.classList.toggle('hdr-hidden', header.classList.contains('is-hidden'));
+      if (goingDown && y > 500 && !document.body.style.overflow) hidden = true;
+      else if (goingUp || y < 200) hidden = false;
+      setClass(header, 'is-hidden', hidden);
+      setClass(document.body, 'hdr-hidden', hidden);
       last = y;
     });
-    header.addEventListener('focusin', function () { header.classList.remove('is-hidden'); });
+    header.addEventListener('focusin', function () { hidden = false; header.classList.remove('is-hidden'); });
   }
 
   function initProgress() {
+    var bar = $('.progress');
     var rail = $('[data-rail]');
+    var fill = rail ? $('.rail__fill', rail) : null;
     var links = rail ? $$('li', rail) : [];
     var ids = links.map(function (li) { return $('a', li).getAttribute('data-scroll-to'); });
     var darks = $$('[data-dark]');
-    var lastActive = -1, flashT = null;
+    var lastActive = -1, lastProgress = -1, flashT = null;
     var navLinks = $$('[data-nav]');
+    var tops = [], darkRanges = [], maxScroll = 1;
+    onMeasure(function () {
+      maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      tops = ids.map(function (id) { var s = document.getElementById(id); return s ? pageTop(s) : Infinity; });
+      darkRanges = darks.map(function (d) { var t = pageTop(d); return [t, t + d.offsetHeight]; });
+    });
     onScrollFrame(function (y, vh) {
-      var max = document.documentElement.scrollHeight - vh;
-      root.style.setProperty('--progress', max > 0 ? clamp(y / max, 0, 1).toFixed(4) : 0);
+      // The bar and the rail fill are transforms only: no style recalc beyond them.
+      var p = Math.round(clamp(y / maxScroll, 0, 1) * 1000) / 1000;
+      if (p !== lastProgress) {
+        lastProgress = p;
+        if (bar) bar.style.transform = 'scaleX(' + p + ')';
+        if (fill) fill.style.transform = 'scaleY(' + p + ')';
+      }
       if (!rail) return;
-      var active = 0;
-      ids.forEach(function (id, i) {
-        var s = document.getElementById(id);
-        if (s && s.getBoundingClientRect().top <= vh * 0.45) active = i;
-      });
-      links.forEach(function (li, i) {
-        li.classList.toggle('is-active', i === active);
-        li.classList.toggle('is-passed', i < active);
-      });
-      navLinks.forEach(function (a) { a.classList.toggle('is-current', a.getAttribute('data-nav') === ids[active]); });
+      var active = 0, line = y + vh * 0.45;
+      for (var i = 0; i < tops.length; i++) if (tops[i] <= line) active = i;
       if (active !== lastActive) {
+        links.forEach(function (li, i) {
+          setClass(li, 'is-active', i === active);
+          setClass(li, 'is-passed', i < active);
+        });
+        navLinks.forEach(function (a) { setClass(a, 'is-current', a.getAttribute('data-nav') === ids[active]); });
         // Name the new section briefly, then get out of the content's way.
         if (lastActive > -1) links.forEach(function (li) { li.classList.remove('flash'); });
         lastActive = active;
@@ -220,12 +251,9 @@
         links[active].classList.add('flash');
         flashT = setTimeout(function () { links[active].classList.remove('flash'); }, 1600);
       }
-      var mid = vh / 2, onDark = false;
-      darks.forEach(function (d) {
-        var r = d.getBoundingClientRect();
-        if (r.top <= mid && r.bottom >= mid) onDark = true;
-      });
-      rail.classList.toggle('on-dark-bg', onDark);
+      var mid = y + vh / 2, onDark = false;
+      for (var d = 0; d < darkRanges.length; d++) if (darkRanges[d][0] <= mid && darkRanges[d][1] >= mid) { onDark = true; break; }
+      setClass(rail, 'on-dark-bg', onDark);
     });
   }
 
@@ -235,10 +263,14 @@
   function initHero() {
     var hero = $('[data-hero]');
     if (!hero) return;
+    var h = 1, lastP = -1;
+    onMeasure(function () { h = hero.offsetHeight || 1; });
     onScrollFrame(function (y) {
-      var h = hero.offsetHeight || 1;
-      if (y > h * 1.2) return;
-      hero.style.setProperty('--p', clamp(y / h, 0, 1).toFixed(4));
+      if (y > h * 1.2 && lastP === 1) return;
+      var p = Math.round(clamp(y / h, 0, 1) * 1000) / 1000;
+      if (p === lastP) return;
+      lastP = p;
+      hero.style.setProperty('--p', p);
     });
     initDeck();
   }
@@ -452,7 +484,9 @@
       if (reduceMotion) { b.textContent = target; return; }
       var spins = 6 + i * 3 + Math.floor(Math.random() * 4);
       setTimeout(function tick() {
-        b.classList.remove('flip'); b.offsetWidth; b.classList.add('flip');
+        // Web Animations replays the flip without forcing a layout; restarting the
+        // CSS class needed a reflow per letter, hundreds of them across the board.
+        if (b.animate) b.animate([{ transform: 'none' }, { transform: 'scaleY(.15)' }, { transform: 'none' }], { duration: 90 });
         b.textContent = spins-- > 0 ? FLAP_CHARS.charAt(Math.floor(Math.random() * 26)) : target;
         if (spins >= 0) setTimeout(tick, 55);
       }, delay || 0);
@@ -484,7 +518,8 @@
 
     var phone = window.matchMedia('(max-width: 640px)');
     var passHome = pass.parentNode;
-    var openOnPhone = true, busy = false;
+    // Phones start with every pass closed; a tap on a row opens its pass.
+    var openOnPhone = false, busy = false;
 
     /* Phones: the pass lives under its row and opens/closes like a drawer.
        Height, fade and a slight drop are animated together. */
@@ -585,6 +620,81 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * Endless animations (tickers, the hero's drifting details, the flight
+   * trail, map halos, the plane on the boarding pass) rest while their
+   * section is off screen; site.css pauses everything under .is-offscreen.
+   * Some of them (SVG strokes, SVG transforms) cannot run on the
+   * compositor, so left running they cost style and paint work every frame.
+   * ------------------------------------------------------------------ */
+  function initOffscreen() {
+    if (!('IntersectionObserver' in window)) return;
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { e.target.classList.toggle('is-offscreen', !e.isIntersecting); });
+    }, { rootMargin: '100px 0px' });
+    $$('main > section, main > .band, .marquee, .footer').forEach(function (el) { io.observe(el); });
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Live news ticker: headlines from /api/news, built-in links as fallback
+   * ------------------------------------------------------------------ */
+  function ago(iso) {
+    var mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    if (!(mins >= 0)) return '';
+    if (mins < 60) return Math.max(1, mins) + 'm ago';
+    if (mins < 60 * 24) return Math.round(mins / 60) + 'h ago';
+    return Math.round(mins / 1440) + 'd ago';
+  }
+
+  function initNews() {
+    var band = $('[data-news]');
+    if (!band) return;
+    var track = $('[data-news-track]', band), marquee = $('[data-news-marquee]', band);
+    var status = $('[data-news-status]', band);
+
+    // The track scrolls by half its width, so it holds the items twice; the
+    // copy is hidden from screen readers and the tab order.
+    function loop() {
+      $$('[data-news-copy]', track).forEach(function (n) { n.remove(); });
+      var originals = $$('.news', track);
+      originals.forEach(function (n) {
+        var c = n.cloneNode(true);
+        c.setAttribute('aria-hidden', 'true');
+        c.setAttribute('tabindex', '-1');
+        c.setAttribute('data-news-copy', '');
+        track.appendChild(c);
+      });
+      // A steady reading speed, whatever the number of headlines. The width is
+      // read after the next paint, when layout is already done and the read is
+      // free; reading it straight away forced a full layout during start-up.
+      requestAnimationFrame(function () {
+        setTimeout(function () {
+          marquee.style.setProperty('--dur', Math.max(30, Math.round(track.scrollWidth / 2 / 55)) + 's');
+        }, 0);
+      });
+    }
+    loop();
+
+    if (location.protocol === 'file:' || !window.fetch) return;
+    fetch('/api/news', { headers: { Accept: 'application/json' } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        var items = data && data.items;
+        if (!items || items.length < 3) return;
+        track.innerHTML = items.map(function (it) {
+          var when = ago(it.date);
+          return '<a class="news" href="' + esc(it.link) + '" target="_blank" rel="noopener">'
+            + '<span class="news__tag">' + esc(it.tag) + '</span>'
+            + '<span class="news__title">' + esc(it.title) + '</span>'
+            + '<span class="news__meta">' + esc(it.source) + (when ? ' · ' + when : '') + '</span></a>';
+        }).join('');
+        band.classList.add('is-live');
+        if (status) status.textContent = 'Live';
+        loop();
+      })
+      .catch(function () { /* keep the built-in links */ });
+  }
+
+  /* ------------------------------------------------------------------ *
    * Services: bento tiles (tilt + spotlight) open a detail dialog
    * ------------------------------------------------------------------ */
   function paragraphs(s) {
@@ -646,20 +756,23 @@
         setTimeout(function () { fill(); sBody.style.setProperty('--swap', (-dir * 18) + 'px'); sBody.offsetWidth; sBody.classList.remove('is-swapping'); }, 200);
       } else fill();
     }
-    var phoneSheet = window.matchMedia('(max-width: 640px)');
     var sheetPanel = $('.sheet__panel', sheet);
-    // Phones: the detail card expands out of the tile that was tapped and
-    // shrinks back into it on close (clip-path from the tile's rectangle).
+    // The detail card grows out of the tapped tile into the centre of the
+    // screen, and shrinks back into it on close: --fx/--fy is the tile
+    // centre's offset from the screen centre (see .sheet__panel in site.css).
     function clipFrom(el) {
-      if (!phoneSheet.matches || !el || !el.getBoundingClientRect) { sheetPanel.style.removeProperty('--clip-from'); return; }
-      var r = el.getBoundingClientRect(), m = 12;
-      var t = Math.max(0, r.top - m), l = Math.max(0, r.left - m);
-      var rt = Math.max(0, window.innerWidth - m - r.right), b = Math.max(0, window.innerHeight - m - r.bottom);
-      // jump (not animate) to the tile's shape, so the open/close starts exactly there
-      sheetPanel.style.transition = 'none';
-      sheetPanel.style.setProperty('--clip-from', 'inset(' + t + 'px ' + rt + 'px ' + b + 'px ' + l + 'px round 18px)');
-      sheetPanel.offsetWidth;
-      sheetPanel.style.transition = '';
+      if (!el || !el.getBoundingClientRect) return;
+      var r = el.getBoundingClientRect();
+      var fx = r.left + r.width / 2 - window.innerWidth / 2;
+      var fy = r.top + r.height / 2 - window.innerHeight / 2;
+      // a tile scrolled off screen would fling the card in from afar
+      if (Math.abs(fy) > window.innerHeight) { fx = 0; fy = 24; }
+      // while closed, jump (not animate) to the tile so the opening starts there
+      var closed = !sheet.classList.contains('is-open');
+      if (closed) sheetPanel.style.transition = 'none';
+      sheetPanel.style.setProperty('--fx', Math.round(fx) + 'px');
+      sheetPanel.style.setProperty('--fy', Math.round(fy) + 'px');
+      if (closed) { sheetPanel.offsetWidth; sheetPanel.style.transition = ''; }
     }
     function openSheet(i) {
       lastFocus = document.activeElement;
@@ -823,29 +936,42 @@
       route.style.setProperty('--rp', 1);
       stops.forEach(function (s) { s.classList.add('is-lit'); });
     } else {
+      var rTop = 0, rH = 1, lastRp = -1;
+      onMeasure(function () { rTop = pageTop(route); rH = route.offsetHeight || 1; });
       onScrollFrame(function (y, vh) {
-        var r = route.getBoundingClientRect();
-        if (r.top > vh || r.bottom < 0) return;
-        var p = clamp((vh * 0.9 - r.top) / (r.height + vh * 0.2), 0, 1);
-        route.style.setProperty('--rp', p.toFixed(4));
-        stops.forEach(function (s, i) { s.classList.toggle('is-lit', p >= (i / Math.max(1, stops.length - 1)) * 0.95); });
+        var top = rTop - y;
+        if (top > vh || top + rH < 0) return;
+        var p = Math.round(clamp((vh * 0.9 - top) / (rH + vh * 0.2), 0, 1) * 1000) / 1000;
+        if (p === lastRp) return;
+        lastRp = p;
+        route.style.setProperty('--rp', p);
+        stops.forEach(function (s, i) { setClass(s, 'is-lit', p >= (i / Math.max(1, stops.length - 1)) * 0.95); });
       });
     }
 
     // Path length at each stop: the point on the curve closest to the dot's centre.
+    // The curve lives in fixed SVG units, so it is sampled once into a table
+    // (getPointAtLength is slow: re-walking it per stop cost over a second).
+    var SAMPLES = 400, sampleX = null, total = 0;
+    function sample() {
+      total = path.getTotalLength();
+      sampleX = new Float32Array(SAMPLES + 1);
+      for (var k = 0; k <= SAMPLES; k++) sampleX[k] = path.getPointAtLength(total * k / SAMPLES).x;
+    }
     function measure() {
       if (!path || !path.getTotalLength) return;
-      var total = path.getTotalLength(), w = svg.getBoundingClientRect().width || 1;
+      if (!sampleX) sample();
+      var w = svg.getBoundingClientRect().width || 1;
       var base = route.getBoundingClientRect().left;
       lens = stops.map(function (s) {
         var d = $('.stop__dot', s).getBoundingClientRect();
         var targetX = (d.left + d.width / 2 - base) / w * 1000;
         var best = 0, bestD = Infinity;
-        for (var l = 0; l <= total; l += total / 400) {
-          var dx = Math.abs(path.getPointAtLength(l).x - targetX);
-          if (dx < bestD) { bestD = dx; best = l; }
+        for (var k = 0; k <= SAMPLES; k++) {
+          var dx = Math.abs(sampleX[k] - targetX);
+          if (dx < bestD) { bestD = dx; best = k; }
         }
-        return best;
+        return total * best / SAMPLES;
       });
     }
     function placeAt(len) {
@@ -909,13 +1035,25 @@
       });
     });
 
-    // Re-anchor the pin whenever the layout settles or changes.
-    function anchor() {
-      if (mobile.matches) return;
+    // Re-anchor the pin whenever the layout settles or changes; however many
+    // triggers fire together (load, fonts, resize, observer), it runs once a frame.
+    // Nothing is measured until the section comes near the viewport: sampling
+    // the curve is a few hundred SVG queries that need not delay the page load.
+    var anchorQueued = false, near = !('IntersectionObserver' in window);
+    if (!near) {
+      new IntersectionObserver(function (en, obs) {
+        if (!en[0].isIntersecting) return;
+        near = true; obs.disconnect(); anchor();
+      }, { rootMargin: '1200px 0px' }).observe(route);
+    }
+    function anchorNow() {
+      anchorQueued = false;
+      if (mobile.matches || !near) return;
       measure();
       if (lens.length) placeAt(lens[current]);
       placeDetail(current);
     }
+    function anchor() { if (!anchorQueued) { anchorQueued = true; requestAnimationFrame(anchorNow); } }
     select(0, false);
     anchor();
     window.addEventListener('resize', anchor);
@@ -1044,6 +1182,21 @@
   };
   var CC_LABEL = { GB: 'UK', US: 'US/CA', CA: 'US/CA' };
 
+  // Country names: the common ones from a table, the rest from one shared
+  // Intl.DisplayNames (creating one is slow on low-end phones, and the
+  // country-code list used to create one per country).
+  var REGION_NAMES = { IN: 'India', AE: 'United Arab Emirates', IE: 'Ireland', GB: 'United Kingdom', US: 'United States',
+    CA: 'Canada', AU: 'Australia', NZ: 'New Zealand', SG: 'Singapore', MY: 'Malaysia', PK: 'Pakistan', BD: 'Bangladesh',
+    NP: 'Nepal', LK: 'Sri Lanka', SA: 'Saudi Arabia', QA: 'Qatar', OM: 'Oman', KW: 'Kuwait', BH: 'Bahrain', NG: 'Nigeria', KE: 'Kenya' };
+  var regionFmt = null;
+  function regionName(iso) {
+    if (REGION_NAMES[iso]) return REGION_NAMES[iso];
+    try {
+      if (!regionFmt) regionFmt = new Intl.DisplayNames(['en'], { type: 'region' });
+      return (REGION_NAMES[iso] = regionFmt.of(iso));
+    } catch (e) { return iso; }
+  }
+
   function detectOrigin() {
     var iso = null;
     try { iso = TZ_COUNTRY[Intl.DateTimeFormat().resolvedOptions().timeZone] || null; } catch (e) { /* old browser */ }
@@ -1059,7 +1212,7 @@
       iso = east >= 3 && east < 5 ? 'AE' : 'IN';
     }
     var name = iso;
-    try { name = new Intl.DisplayNames(['en'], { type: 'region' }).of(iso); } catch (e) { name = { IN: 'India', AE: 'UAE' }[iso] || iso; }
+    name = regionName(iso);
     if (iso === 'AE') name = 'UAE';
     if (iso === 'GB') name = 'UK';
     if (iso === 'US') name = 'USA';
@@ -1245,7 +1398,7 @@
     if (!c) return dial;
     var names = { 'UK': 'UK', 'US/CA': 'US and Canada', 'RU/KZ': 'Russia and Kazakhstan', 'AE': 'UAE' };
     if (names[c[0]]) return names[c[0]] + ' (' + dial + ')';
-    try { return new Intl.DisplayNames(['en'], { type: 'region' }).of(c[0]) + ' (' + dial + ')'; } catch (e) { return c[0] + ' (' + dial + ')'; }
+    return regionName(c[0]) + ' (' + dial + ')';
   }
 
   function looksFake(d) {
@@ -1657,7 +1810,7 @@
       var me = role === 'user';
       var wrap = document.createElement('div');
       wrap.className = 'msg' + (me ? ' msg--me' : '');
-      wrap.innerHTML = '<div class="msg__av">' + (me ? icon('i-user') : '<img src="./assets/img/logo/icon.png" alt="">') + '</div>' +
+      wrap.innerHTML = '<div class="msg__av">' + (me ? icon('i-user') : '<img src="./assets/img/logo/icon-44.png" srcset="./assets/img/logo/icon-44.png 1x, ./assets/img/logo/icon-88.png 2x, ./assets/img/logo/icon-132.png 3x" alt="">') + '</div>' +
         '<div class="msg__b">' + mdToHtml(content) + '<span class="msg__t">' + clock() + '</span></div>';
       list.insertBefore(wrap, before || typing);
       list.scrollTop = list.scrollHeight;
@@ -2033,10 +2186,17 @@
     var trayClear = $('[data-tray-clear]');
     if (trayClear) trayClear.addEventListener('click', clearSelection);
 
-    if (filters) onScrollFrame(function () {
-      var stuckAt = parseFloat(getComputedStyle(filters).top) || 0;
-      filters.classList.toggle('is-stuck', filters.getBoundingClientRect().top <= stuckAt + 0.5);
-    });
+    // The bar is "stuck" once a zero-height marker just above it scrolls under
+    // its sticky offset. An observer does that without any per-frame layout reads.
+    if (filters && 'IntersectionObserver' in window) {
+      var marker = document.createElement('div');
+      marker.setAttribute('aria-hidden', 'true');
+      filters.parentNode.insertBefore(marker, filters);
+      var stickTop = parseFloat(getComputedStyle(filters).top) || 0;
+      new IntersectionObserver(function (en) {
+        filters.classList.toggle('is-stuck', !en[0].isIntersecting && en[0].boundingClientRect.top < stickTop + 1);
+      }, { rootMargin: (-stickTop - 1) + 'px 0px 0px 0px', threshold: 0 }).observe(marker);
+    }
 
     // Shortlist → application modal
     var lastFocus = null;
@@ -2083,6 +2243,8 @@
   initHero();
   initMagnetic();
   initPanels();
+  initOffscreen();
+  initNews();
   initServices();
   initBoard();
   initTabs();
