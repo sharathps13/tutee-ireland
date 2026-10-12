@@ -865,13 +865,15 @@
     });
   }
 
+  // Permitted work hours on Stamp 2; also read by the chat (chatExtraPassages).
+  var WEEK_MODES = {
+    term: { hours: [4, 0, 4, 0, 4, 8, 0], total: '20 hrs', note: 'a week during term time' },
+    hol: { hours: [8, 8, 8, 8, 8, 0, 0], total: '40 hrs', note: 'a week from June to September and 15 December to 15 January' }
+  };
   function initWeek() {
     var week = $('[data-week]');
     if (!week) return;
-    var MODES = {
-      term: { hours: [4, 0, 4, 0, 4, 8, 0], total: '20 hrs', note: 'a week during term time' },
-      hol: { hours: [8, 8, 8, 8, 8, 0, 0], total: '40 hrs', note: 'a week from June to September and 15 December to 15 January' }
-    };
+    var MODES = WEEK_MODES;
     var bars = $$('.week__bar', week);
     var btns = $$('[data-week-mode]', week);
     var totalEl = $('[data-week-total]', week), noteEl = $('[data-week-note]', week);
@@ -1442,28 +1444,6 @@
     return ccName(dial) + ': ' + (rule[0] === rule[1] ? rule[0] : rule[0] + ' to ' + rule[1]) + ' digits';
   }
 
-  /* Chat: a number typed with its own +code, or assumed to be from the visitor's country. */
-  function validatePhoneLoose(raw) {
-    var txt = String(raw || '').trim(), d = txt.replace(/\D/g, '');
-    if (/^(\+|00)/.test(txt)) {
-      if (txt.indexOf('00') === 0) d = d.slice(2);
-      var best = null;
-      Object.keys(PHONE_RULES).forEach(function (k) {
-        var kd = k.slice(1);
-        if (d.indexOf(kd) === 0 && (!best || kd.length > best.length - 1)) best = k;
-      });
-      if (!best) return { ok: false, msg: "I don't recognise that country code. Try again, for example +91 98765 43210." };
-      var r = validatePhone(best, d.slice(best.length - 1));
-      if (r.ok) r.full = best + ' ' + r.national;
-      return r;
-    }
-    var dial = (COUNTRY_CODES.filter(function (c) { return c[0] === (CC_LABEL[ORIGIN.iso] || ORIGIN.iso); })[0] || ['IN', '+91'])[1];
-    var res = validatePhone(dial, txt);
-    if (res.ok) res.full = dial + ' ' + res.national;
-    else res.msg += ' If you are outside ' + ccName(dial).replace(/ \(.*/, '') + ', start with your country code, like +44.';
-    return res;
-  }
-
   var COMMON_DOMAINS = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'live.com', 'yahoo.co.in',
     'rediffmail.com', 'protonmail.com', 'aol.com', 'hotmail.co.uk', 'yahoo.co.uk', 'outlook.in', 'msn.com', 'zoho.com', 'gmx.com'];
   var DISPOSABLE = ['mailinator.com', 'guerrillamail.com', 'guerrillamail.net', 'sharklasers.com', '10minutemail.com', 'tempmail.com',
@@ -1768,29 +1748,64 @@
   /* ------------------------------------------------------------------ *
    * AI counsellor chat
    * ------------------------------------------------------------------ */
-  var CHAT_WELCOME = "Hi! 👋 I'm your **Tutee Connect AI Counsellor**.\n\nI can answer questions about Irish Student Visas, top Irish universities and our 99% success rate programmes. How can I help you today?";
+  /* The chat answers from the website's own content (assets/js/chat-brain.js).
+     It never asks for names, numbers or emails: anyone who wants a person is
+     pointed to the advisor contacts already on the page. */
+  var CHAT_WELCOME = "Hi! 👋 I'm **Tutee AI**.\n\nAsk me anything about studying in Ireland or Tutee Connect's services: visas, universities, funding, working while you study, settling in. I answer from the information on this website.";
 
   function mdToHtml(s) {
     return esc(s).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
   }
 
-  function cannedReply(text) {
-    var q = text.toLowerCase();
-    if (/visa|stamp 2|avats|interview|refus/.test(q))
-      return 'The Irish Student Visa lets you study a programme on Ireland’s official register on Stamp 2 permission. Tutee Connect has a **99% Irish Student Visa success rate**. We handle your Letter of Acceptance, proof of funds, medical insurance and AVATS application so nothing is missing.';
-    if (/scholarship|fund|financial|aid|bursar|loan/.test(q))
-      return 'Many top Irish universities offer merit-based scholarships and international bursaries. We analyse your academic profile and help you apply where you have the best chance of funding. We can also arrange **collateral and non-collateral education loans** through our banking partners.';
-    if (/cost|fee|tuition|money|expense|budget|afford/.test(q))
-      return 'Costs depend on your institution and course, and you also need to show funds for your living costs for one academic year on top of your fees. Our counsellors can give you a **personal estimate**, and we help students secure **non-collateral education loans** and part-time work.';
-    if (/job|work|earn|part.?time|graduate programme|stamp 1g/.test(q))
-      return "Yes! On Stamp 2 you can work up to **20 hours a week during term time**, and **40 hours a week** from June to September and between 15 December and 15 January. After you graduate, the **Third Level Graduate Programme** lets you stay and work for 12 months, or up to 24 with a Master's or PhD.";
-    if (/ielts|pte|duolingo|toefl|gmat|exam|english/.test(q))
-      return 'Most institutions ask for an English test: **IELTS, PTE Academic, TOEFL or the Duolingo English Test**. Some postgraduate courses such as MBAs also ask for a GMAT score. We can shortlist universities that match your current scores.';
-    if (/family|spouse|partner|wife|husband|child|dependant/.test(q))
-      return 'Ireland does not normally grant dependant permission to students. Family reunification opens up once you hold a **Critical Skills Employment Permit**, which lets your partner and children join you immediately. We plan that timeline with you from the start.';
-    if (/tutee|connect|service|help/.test(q))
-      return 'Tutee Connect supports you end to end: university shortlisting and applications, study visa documentation, education loans and post-landing settlement in Ireland.';
-    return "Great question! Studying in Ireland has a lot of moving parts (admissions, Letter of Acceptance, AVATS, proof of funds, loans), and our experts at Tutee Connect will work through every detail with you.";
+  // Advisor contact routes, read from the page so they always match it.
+  function advisorActions() {
+    var tel = $('a[href^="tel:"]'), mail = $('a[href^="mailto:"]'), wa = $('a[href*="wa.me/"]');
+    var acts = [{ label: 'Reserve a call', section: { id: 'contact', page: 'home' }, primary: true }];
+    if (wa) acts.push({ label: 'WhatsApp us', href: wa.getAttribute('href') });
+    if (tel) acts.push({ label: 'Call ' + tel.textContent.trim(), href: tel.getAttribute('href') });
+    if (mail) acts.push({ label: 'Email ' + mail.textContent.trim(), href: mail.getAttribute('href') });
+    return acts;
+  }
+
+  function chatReply(r) {
+    switch (r.type) {
+      case 'greet': return { text: 'Hello! What would you like to know about studying in Ireland or our services?' };
+      case 'thanks': return { text: "You're welcome! Anything else you'd like to know?" };
+      case 'about': return { text: "I'm **Tutee AI**, Tutee Connect's assistant. I answer questions using the information on this website. If something isn't covered here, I'll point you to one of our advisors." };
+      case 'advisor': return { text: 'Our advisors are happy to help. Reach them any of these ways:', actions: advisorActions() };
+      case 'contact': return { text: r.text, actions: advisorActions() };
+      case 'unclear': return { text: 'Could you tell me a little more about what you would like to know? For example, visas, a university, scholarships or working while you study.' };
+      case 'notfound': return {
+        text: (r.money
+          ? "This website doesn't list fees, costs or salaries, as they depend on your course and institution. "
+          : "I couldn't find that on this website, and I'd rather not guess. ") +
+          'One of our advisors can answer it for you:',
+        actions: advisorActions() };
+      default: {
+        var acts = (r.sections || []).map(function (s) { return { label: 'See ' + s.name, section: s }; });
+        acts.push({ label: 'Ask an advisor', section: { id: 'contact', page: 'home' }, subtle: true });
+        return { text: (r.money ? "This website doesn't list fees or costs, but here is what it says:\n\n" : '') + r.text, actions: acts };
+      }
+    }
+  }
+
+  // Content that lives in main.js data rather than in the page text (the
+  // settlement stops, the work-hours planner) is handed to the chat too.
+  function chatExtraPassages() {
+    var out = STOPS.map(function (s) {
+      return {
+        title: s.tag + ': ' + s.title,
+        text: s.what + ' ' + s.facts.map(function (f) { return f[0] + ': ' + f[1] + '.'; }).join(' ') + ' How we help: ' + s.help.join('; ') + '.',
+        sec: { id: 'relocate', name: 'Settle in Ireland', page: 'home' }
+      };
+    });
+    out.push({
+      title: 'How many hours can I work while studying? Part-time work hours on a student visa',
+      text: 'On a Stamp 2 student permission you can work part-time for up to ' + WEEK_MODES.term.total + ' ' + WEEK_MODES.term.note +
+        ', and up to ' + WEEK_MODES.hol.total + ' ' + WEEK_MODES.hol.note + '. We help you find permitted part-time work from day one, and our students typically land part-time roles within their first 30 days in Ireland.',
+      sec: { id: 'funding', name: 'Funding: Earn while you learn', page: 'home' }, kind: 'faq'
+    });
+    return out;
   }
 
   /* Phones: keep the quick-contact bar on the visible bottom edge. When the
@@ -1825,15 +1840,47 @@
     var sendBtn = $('[data-chat-send]', panel);
     var typing = $('[data-chat-typing]', panel);
     var chipRow = $('[data-chat-chips]', panel);
-    var stage = 'idle', lead = { name: '', phone: '', email: '' }, askedForDetails = false, seeded = false;
+    var seeded = false, busy = false;
+    var brain = window.TC_chatBrain;
+    if (brain) brain.addPassages(chatExtraPassages());
 
     function clock() { return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
-    function push(role, content, before) {
+    function goTo(sec) {
+      var onHome = isHome();
+      if (sec.page === 'universities') {
+        if (onHome) window.location.href = './universities.html';
+        else { close(); window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' }); }
+        return;
+      }
+      if (onHome) { close(); setTimeout(function () { goToSection(sec.id || 'top'); }, 200); }
+      else window.location.href = './index.html' + (sec.id ? '#' + sec.id : '');
+    }
+    function push(role, content, before, actions) {
       var me = role === 'user';
       var wrap = document.createElement('div');
       wrap.className = 'msg' + (me ? ' msg--me' : '');
       wrap.innerHTML = '<div class="msg__av">' + (me ? icon('i-user') : '<img src="./assets/img/logo/icon-44.png" srcset="./assets/img/logo/icon-44.png 1x, ./assets/img/logo/icon-88.png 2x, ./assets/img/logo/icon-132.png 3x" alt="">') + '</div>' +
         '<div class="msg__b">' + mdToHtml(content) + '<span class="msg__t">' + clock() + '</span></div>';
+      if (actions && actions.length) {
+        var bar = document.createElement('div');
+        bar.className = 'msg__acts';
+        actions.forEach(function (a) {
+          var el;
+          if (a.href) {
+            el = document.createElement('a');
+            el.href = a.href;
+            if (/^https?:/.test(a.href)) { el.target = '_blank'; el.rel = 'noopener noreferrer'; }
+          } else {
+            el = document.createElement('button');
+            el.type = 'button';
+            el.addEventListener('click', function () { goTo(a.section); });
+          }
+          el.className = 'msg__act' + (a.primary ? ' is-primary' : '') + (a.subtle ? ' is-subtle' : '');
+          el.textContent = a.label;
+          bar.appendChild(el);
+        });
+        $('.msg__b', wrap).insertBefore(bar, $('.msg__t', wrap));
+      }
       list.insertBefore(wrap, before || typing);
       list.scrollTop = list.scrollHeight;
     }
@@ -1845,6 +1892,7 @@
     }
     function open() {
       seed();
+      if (brain) brain.warm();                     // build the knowledge index while they type
       panel.classList.add('is-open');
       panel.setAttribute('aria-hidden', 'false');
       launcher.classList.add('is-hidden');
@@ -1858,78 +1906,28 @@
     }
     function reset() {
       $$('.msg', list).forEach(function (n) { n.remove(); });
-      stage = 'idle'; lead = { name: '', phone: '', email: '' }; askedForDetails = false; seeded = false;
+      seeded = false;
       chipRow.classList.remove('hidden');
       input.value = ''; syncSend(); setTyping(false);
       seed();
     }
-    function submitLead() {
-      return fetch(ENQUIRY_ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({
-          subject: 'New Lead from Chatbot!', from_name: 'Tutee AI Counsellor',
-          name: lead.name, phone: lead.phone, email: lead.email,
-          destination: 'Chatbot General Inquiry', page: enquiryPage()
-        })
-      }).then(function (r) { return r.json().catch(function () { return { success: false }; }); });
-    }
-    function later(ms, fn) { setTyping(true); setTimeout(function () { setTyping(false); fn(); }, ms); }
 
     function send(text) {
-      if (!text || !text.trim()) return;
-      text = text.trim();
+      if (!text || !text.trim() || busy) return;
+      text = text.trim().slice(0, 400);
       push('user', text);
       input.value = ''; syncSend();
       chipRow.classList.add('hidden');
-
-      if (stage === 'asking_name') {
-        return later(600, function () {
-          lead.name = text; stage = 'asking_phone';
-          push('assistant', 'Thanks ' + text.split(' ')[0] + '! What is the best **phone number** (with country code) to reach you on?');
-        });
-      }
-      if (stage === 'asking_phone') {
-        return later(600, function () {
-          var pr = validatePhoneLoose(text);
-          if (!pr.ok) { push('assistant', pr.msg); return; }
-          lead.phone = pr.full; stage = 'asking_email';
-          push('assistant', 'Got it. Lastly, what is your **email address**?');
-        });
-      }
-      if (stage === 'asking_email') {
-        return later(600, function () {
-          var er = validateEmail(text);
-          if (!er.ok) { push('assistant', er.msg + (er.suggest ? ' If so, just type it again.' : '')); return; }
-          lead.email = er.email; stage = 'idle';
-          push('assistant', 'Perfect! Sending your profile to our experts now…');
-          setTyping(true);
-          submitLead().then(function (res) {
-            setTyping(false);
-            push('assistant', res && res.success
-              ? '✅ **Done!** Your profile is with an expert counsellor, who will contact you shortly about admission and visas.\n\nAnything else I can help with in the meantime?'
-              : 'Something went wrong sending your profile. Please use the contact form on this page instead.');
-          }).catch(function () {
-            setTyping(false);
-            push('assistant', 'Network error while sending. Please use the contact form on this page instead.');
-          });
-        });
-      }
-      if (/^(evaluate my profile|book free counselling)$/i.test(text)) {
-        return later(500, function () {
-          stage = 'asking_name';
-          push('assistant', "Happy to book your free counselling session! A human counsellor will review your profile personally.\n\nCould I have your **full name**?");
-        });
-      }
-      later(700, function () {
-        push('assistant', cannedReply(text));
-        if (!askedForDetails) {
-          askedForDetails = true;
-          later(1400, function () {
-            stage = 'asking_name';
-            push('assistant', 'To give you advice tailored to your profile, could I take your **full name**?');
-          });
-        }
+      busy = true; setTyping(true);
+      var started = Date.now();
+      var reply = brain ? brain.answer(text) : Promise.resolve({ type: 'notfound' });
+      reply.catch(function () { return { type: 'notfound' }; }).then(function (r) {
+        var out = chatReply(r);
+        // a short, natural pause; never an artificial wait on top of real work
+        setTimeout(function () {
+          setTyping(false); busy = false;
+          push('assistant', out.text, null, out.actions);
+        }, Math.max(0, 450 - (Date.now() - started)));
       });
     }
 

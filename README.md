@@ -21,7 +21,7 @@ Bricolage Grotesque (Google Fonts); body copy uses the self-hosted Quicksand.
 | Funding | Three tabs: scholarships, loans with partner logos, part-time work with an interactive hours planner. |
 | Settle | Four-stop route that draws on scroll. Tapping a stop flies a pin along the line and opens its details: what it is, key facts, how we help. |
 | Stories | Two counter-scrolling rows of testimonials that pause on hover. |
-| FAQ | Pick a question on the left and its answer card swaps in on the right, with previous/next buttons. The Tutee AI chatbot lives only behind its button at the bottom right. |
+| FAQ | Pick a question on the left and its answer card swaps in on the right, with previous/next buttons. The Tutee AI chat lives behind its button in the quick-contact dock. |
 | Free counselling | A two-step boarding-pass check-in: the stub previews the passenger name and topic live, a plane flies from the visitor's country to DUB as fields are filled, and a "Checked in" stamp lands on success. |
 
 A quick-contact dock sits on both pages: Ask Tutee AI (bottom-left), Reserve a call (scrolls to Free
@@ -66,7 +66,8 @@ assets/img/logo/                logo.webp (transparent, original colours);
                                 Alegreya (the logo's typeface, colours #054041 / #8c0304), so it is sharp
                                 at any size: see .header__logo / .wordmark in site.css.
 assets/img/                     loan-partner logos, CC-BY photos + CREDITS.md
-netlify/functions/enquiry.mjs   emails enquiries; both forms and the chatbot post to /api/enquiry
+assets/js/chat-brain.js         what Tutee AI knows and how it answers (see "The Tutee AI chat" below)
+netlify/functions/enquiry.mjs   emails enquiries; both forms post to /api/enquiry (the chat collects nothing)
 ```
 
 The two pages share the header, footer, chat and icon sprite by copy. If you change one, change the
@@ -78,6 +79,26 @@ which allows free commercial use with no attribution required; the list is in
 `fonts.googleapis.com` / `fonts.gstatic.com` for the Bricolage Grotesque and Caveat fonts. Scripts
 remain same-origin only.
 
+## The Tutee AI chat
+
+The chat answers **only from this website's content** and never asks for names, numbers or emails.
+`assets/js/chat-brain.js` builds its knowledge when the chat is first opened, from:
+
+- every section of both pages (read live from the DOM; the other page is fetched once), so edits to
+  the copy are picked up automatically with nothing to re-sync
+- the nine services (`services-data.js`), the 113 institutions (`universities-data.js`, loaded on
+  demand), and the settlement stops and work-hours planner handed over by `main.js`
+
+Questions are ranked against those passages (BM25 with a synonym table for how students phrase
+things, and short names such as TCD, UCD, DCU, UL, NUIG). Town and type questions ("colleges in
+Galway", "language schools", "how many universities") get the directory's own lists; contact
+questions get the page's phone, WhatsApp, email, website and offices. When the site does not cover a
+question (or a question uses words the site never mentions), the reply says so and offers the advisor
+contacts instead of guessing. Answered replies carry a button to the matching section and a light
+"Ask an advisor" link.
+
+To teach it something new, put it on the page (or in a FAQ item); to tune matching, edit the
+synonym groups and aliases at the top of `chat-brain.js`.
 ## Performance rules
 
 Stress-tested in headless Chrome at 1920×1080, 1440×900 @2x, 1024×768, and phones at 4× and 6×
