@@ -635,7 +635,7 @@
   }
 
   /* ------------------------------------------------------------------ *
-   * Live news ticker: headlines from /api/news, built-in links as fallback
+   * Live news banner: headlines from /api/news, built-in links as fallback
    * ------------------------------------------------------------------ */
   function ago(iso) {
     var mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
@@ -645,51 +645,132 @@
     return Math.round(mins / 1440) + 'd ago';
   }
 
+  /* The feed carries no pictures (and publishers' photos aren't ours to
+     reuse), so each story gets an Unsplash photo of Ireland matched to what
+     it is about: a named university or city first, then its topic. */
+  var NEWS_PHOTOS = {
+    trinity: ['1651348317504-9513c52e155c', '1542375438-1a6be67f91d9'],   // Campanile, Old Library
+    cork: ['1718535236402-d433e8ecbbe1'],                                  // UCC quad
+    galway: ['1511121798969-a32ea4d37a09'],                                // the Long Walk
+    visa: ['1586441133374-ed1cb4007a47'],                                  // passport and boarding pass
+    // Topic photos never show one particular campus, so a story about one
+    // university is never pictured with another university's buildings.
+    Universities: ['1543269865-cbf427effbad', '1758612214848-04e700d192ce', '1663509851482-56ffbd1cf076'],
+    Students: ['1543269865-cbf427effbad', '1758612214848-04e700d192ce', '1663509851482-56ffbd1cf076'],
+    Careers: ['1631993753423-207208b8afa7', '1662042494231-f8bc6fd93f2b'],
+    Scholarships: ['1450101499163-c8848c66ca85', '1758612214848-04e700d192ce'],
+    Industry: ['1662042494231-f8bc6fd93f2b', '1631993753423-207208b8afa7'],
+    Visas: ['1586441133374-ed1cb4007a47', '1663509851482-56ffbd1cf076'],
+    other: ['1663509851482-56ffbd1cf076', '1713916909642-cb989be455ec', '1723814095552-29daae380d76']
+  };
+  function newsPhoto(it, i, w) {
+    var t = String(it.title || '').toLowerCase(), list;
+    if (/trinity/.test(t)) list = NEWS_PHOTOS.trinity;
+    else if (/\bucc\b|university college cork/.test(t)) list = NEWS_PHOTOS.cork;
+    else if (/galway/.test(t)) list = NEWS_PHOTOS.galway;
+    else if (/visa|permit|stamp \d/.test(t)) list = NEWS_PHOTOS.visa;
+    else list = NEWS_PHOTOS[it.tag] || NEWS_PHOTOS.other;
+    return 'https://images.unsplash.com/photo-' + list[i % list.length] + '?auto=format&fit=crop&q=70&w=' + w;
+  }
+
   function initNews() {
     var band = $('[data-news]');
     if (!band) return;
-    var track = $('[data-news-track]', band), marquee = $('[data-news-marquee]', band);
-    var status = $('[data-news-status]', band);
+    var feature = $('[data-news-feature]', band), list = $('[data-news-list]', band);
+    var status = $('[data-news-status]', band), count = $('[data-news-count]', band);
+    var items = $$('[data-news-fallback] a', band).map(function (a) {
+      return { title: a.textContent.trim(), link: a.href, tag: a.getAttribute('data-tag'), source: a.getAttribute('data-source'), date: '' };
+    });
+    var cur = 0, timer = null, paused = false, onScreen = false;
+    var DWELL = 7000;
 
-    // The track scrolls by half its width, so it holds the items twice; the
-    // copy is hidden from screen readers and the tab order.
-    function loop() {
-      $$('[data-news-copy]', track).forEach(function (n) { n.remove(); });
-      var originals = $$('.news', track);
-      originals.forEach(function (n) {
-        var c = n.cloneNode(true);
-        c.setAttribute('aria-hidden', 'true');
-        c.setAttribute('tabindex', '-1');
-        c.setAttribute('data-news-copy', '');
-        track.appendChild(c);
+    function meta(it) { var w = it.date ? ago(it.date) : ''; return esc(it.source || '') + (w ? ' · ' + w : ''); }
+
+    function paint(dir) {
+      var it = items[cur];
+      var card = document.createElement('a');
+      card.className = 'newsban__card' + (dir ? ' is-in' + (dir < 0 ? ' is-back' : '') : '');
+      card.href = it.link; card.target = '_blank'; card.rel = 'noopener';
+      card.innerHTML =
+        '<img src="' + newsPhoto(it, cur, 1200) + '" srcset="' + newsPhoto(it, cur, 700) + ' 700w, ' + newsPhoto(it, cur, 1200) + ' 1200w, ' + newsPhoto(it, cur, 1800) + ' 1800w" sizes="(max-width: 640px) 100vw, 60vw" alt="" decoding="async">' +
+        '<span class="newsban__body">' +
+          '<span class="newsban__tag">' + esc(it.tag) + '</span>' +
+          '<span class="newsban__title">' + esc(it.title) + '</span>' +
+          '<span class="newsban__meta">' + meta(it) + '<span class="newsban__read">Read story' + icon('i-arrow') + '</span></span>' +
+        '</span>' +
+        '<span class="newsban__bar" aria-hidden="true"><i></i></span>';
+      var old = $$('.newsban__card', feature);
+      feature.appendChild(card);
+      old.forEach(function (o) {
+        o.classList.add('is-out');
+        o.setAttribute('aria-hidden', 'true'); o.tabIndex = -1;
+        setTimeout(function () { o.remove(); }, 700);
       });
-      // A steady reading speed, whatever the number of headlines. The width is
-      // read after the next paint, when layout is already done and the read is
-      // free; reading it straight away forced a full layout during start-up.
-      requestAnimationFrame(function () {
-        setTimeout(function () {
-          marquee.style.setProperty('--dur', Math.max(30, Math.round(track.scrollWidth / 2 / 55)) + 's');
-        }, 0);
-      });
+      if (count) count.textContent = (cur + 1) + ' / ' + items.length;
+      // The next few stories, starting after the featured one
+      var n = Math.min(4, items.length - 1), html = '';
+      for (var k = 1; k <= n; k++) {
+        var j = (cur + k) % items.length, x = items[j];
+        html += '<li style="--k:' + k + '"><button type="button" data-news-go="' + j + '">' +
+          '<img src="' + newsPhoto(x, j, 240) + '" alt="" decoding="async">' +
+          '<span><em>' + esc(x.tag) + '</em><b>' + esc(x.title) + '</b><small>' + meta(x) + '</small></span></button></li>';
+      }
+      list.innerHTML = html;
+      restart();
     }
-    loop();
+    function go(i, dir) { cur = (i + items.length) % items.length; paint(dir); }
+
+    function restart() {
+      clearTimeout(timer);
+      var bar = $('.newsban__card:last-child .newsban__bar i', feature);
+      if (reduceMotion || paused || !onScreen || items.length < 2) { band.classList.add('is-paused'); return; }
+      band.classList.remove('is-paused');
+      if (bar) { bar.style.animation = 'none'; void bar.offsetWidth; bar.style.animation = ''; }
+      timer = setTimeout(function () { go(cur + 1, 1); }, DWELL);
+    }
+    function pause(on) { paused = on; if (on) { clearTimeout(timer); band.classList.add('is-paused'); } else restart(); }
+
+    $('[data-news-next]', band).addEventListener('click', function () { go(cur + 1, 1); });
+    $('[data-news-prev]', band).addEventListener('click', function () { go(cur - 1, -1); });
+    list.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-news-go]');
+      if (b) go(+b.getAttribute('data-news-go'), 1);
+    });
+    var stage = $('.newsban__stage', band);
+    stage.addEventListener('pointerenter', function (e) { if (e.pointerType === 'mouse') pause(true); });
+    stage.addEventListener('pointerleave', function (e) { if (e.pointerType === 'mouse') pause(false); });
+    band.addEventListener('focusin', function () { pause(true); });
+    band.addEventListener('focusout', function (e) { if (!band.contains(e.relatedTarget)) pause(false); });
+
+    // Swipe on the featured story (phones)
+    var sx = null, sy = 0, swiped = false;
+    feature.addEventListener('touchstart', function (e) { sx = e.touches[0].clientX; sy = e.touches[0].clientY; swiped = false; }, { passive: true });
+    feature.addEventListener('touchend', function (e) {
+      if (sx === null) return;
+      var dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+      sx = null;
+      if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) { swiped = true; go(cur + (dx < 0 ? 1 : -1), dx < 0 ? 1 : -1); }
+    }, { passive: true });
+    // A swipe must not also open the story
+    feature.addEventListener('click', function (e) { if (swiped) { e.preventDefault(); swiped = false; } }, true);
+
+    // Only rotate while the banner is on screen
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (en) { onScreen = en[0].isIntersecting; restart(); }, { threshold: 0.3 }).observe(band);
+    } else onScreen = true;
+
+    paint(0);
 
     if (location.protocol === 'file:' || !window.fetch) return;
     fetch('/api/news', { headers: { Accept: 'application/json' } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
-        var items = data && data.items;
-        if (!items || items.length < 3) return;
-        track.innerHTML = items.map(function (it) {
-          var when = ago(it.date);
-          return '<a class="news" href="' + esc(it.link) + '" target="_blank" rel="noopener">'
-            + '<span class="news__tag">' + esc(it.tag) + '</span>'
-            + '<span class="news__title">' + esc(it.title) + '</span>'
-            + '<span class="news__meta">' + esc(it.source) + (when ? ' · ' + when : '') + '</span></a>';
-        }).join('');
+        var live = data && data.items;
+        if (!live || live.length < 3) return;
+        items = live; cur = 0;
         band.classList.add('is-live');
         if (status) status.textContent = 'Live';
-        loop();
+        paint(0);
       })
       .catch(function () { /* keep the built-in links */ });
   }
@@ -1275,6 +1356,14 @@
       var saved = JSON.parse(localStorage.getItem('tcShortlist') || '[]');
       if (Array.isArray(saved)) prefs = saved.filter(function (x) { return typeof x === 'string' && x.length < 200; }).slice(0, 20);
     } catch (err) { /* nothing saved */ }
+    // The directory opens in its own tab: pick up shortlist changes made there.
+    window.addEventListener('storage', function (e) {
+      if (e.key !== 'tcShortlist') return;
+      try {
+        var list = JSON.parse(e.newValue || '[]');
+        if (Array.isArray(list)) { prefs = list.filter(function (x) { return typeof x === 'string' && x.length < 200; }).slice(0, 20); paintPrefs(); }
+      } catch (err) { /* ignore */ }
+    });
 
     // Note: live character count
     var note = $('[data-note]', form), noteCount = $('[data-note-count]', form);
@@ -1314,11 +1403,18 @@
       if (errBox) errBox.classList.add('hidden');
       progress();
     }
+    var stateSel = $('[data-state]', form);
     function next() {
       if (nameIn.value.trim().length < 2) {
         errText.textContent = 'Enter your full name to continue.';
         errBox.classList.remove('hidden');
         nameIn.focus();
+        return;
+      }
+      if (stateSel && !stateSel.value) {
+        errText.textContent = 'Choose the state you are from to continue.';
+        errBox.classList.remove('hidden');
+        stateSel.focus();
         return;
       }
       go(2);
@@ -1369,6 +1465,74 @@
     });
     paintPrefs();
     go(1);
+    initLeavePrompt(form, function () { return step; }, function () {
+      if (step === 1 && nameIn.value.trim().length < 2) return nameIn;
+      if (step === 1 && stateSel && !stateSel.value) return stateSel;
+      if (step === 1) return $('[data-tnext]', form);
+      return [phoneIn, emailIn].filter(function (i) { return !i.value.trim(); })[0] || $('[data-submit-btn]', form);
+    });
+  }
+
+  /* Started the boarding pass but heading off? Closing the tab or leaving the
+     page gets the browser's own "Leave site?" check. Scrolling well away from
+     the form, or moving the pointer out of the window on a laptop, gets our
+     own prompt, at most once per visit. */
+  function initLeavePrompt(form, getStep, firstGap) {
+    var box = $('[data-leave]'), section = form.closest('section');
+    if (!box || !section) return;
+    var started = false, asked = false, open = false, lastFocus = null;
+    function isStarted() {
+      if (getStep() === 3) return false;
+      return $$('input:not([type=hidden]):not([type=checkbox]), textarea, select[name=state]', form).some(function (el) { return el.value.trim() !== ''; })
+        || !!$('[data-topic][aria-pressed="true"]', form);
+    }
+    form.addEventListener('input', function () { started = isStarted(); });
+    form.addEventListener('change', function () { started = isStarted(); });
+    form.addEventListener('click', function () { setTimeout(function () { started = isStarted(); }, 0); });
+    document.addEventListener('tc:submitted', function () { started = false; });
+
+    function show() {
+      if (asked || open || !started || !isStarted()) return;
+      asked = true; open = true; lastFocus = document.activeElement;
+      box.classList.add('is-open'); box.setAttribute('aria-hidden', 'false');
+      setTimeout(function () { $('[data-leave-stay]', box).focus({ preventScroll: true }); }, 50);
+    }
+    function hide() {
+      open = false;
+      box.classList.remove('is-open'); box.setAttribute('aria-hidden', 'true');
+    }
+    $('[data-leave-stay]', box).addEventListener('click', function () {
+      hide();
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setTimeout(function () { var t = firstGap(); if (t) t.focus({ preventScroll: true }); }, 700);
+    });
+    $('[data-leave-go]', box).addEventListener('click', function () {
+      hide(); started = false;
+      if (lastFocus && lastFocus.focus && !form.contains(lastFocus)) lastFocus.focus({ preventScroll: true });
+    });
+    box.addEventListener('click', function (e) { if (e.target === box) hide(); });
+    document.addEventListener('keydown', function (e) { if (open && e.key === 'Escape') hide(); });
+
+    // Scrolled the form fully out of view after starting it
+    var seen = false;
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) {
+          if (en.isIntersecting) { seen = true; return; }
+          if (seen && started) show();
+        });
+      }, { threshold: 0 }).observe(section);
+    }
+    // Laptop "exit intent": the pointer leaves through the top of the window
+    document.addEventListener('mouseout', function (e) {
+      if (!e.relatedTarget && e.clientY <= 0) show();
+    });
+    // Closing the tab or navigating away: the browser's own confirmation
+    window.addEventListener('beforeunload', function (e) {
+      if (!started || !isStarted()) return;
+      e.preventDefault();
+      e.returnValue = '';
+    });
   }
 
   /* ------------------------------------------------------------------ *
@@ -1848,7 +2012,8 @@
     function goTo(sec) {
       var onHome = isHome();
       if (sec.page === 'universities') {
-        if (onHome) window.location.href = './universities.html';
+        // The directory always opens in its own tab, so the home page (and a half-filled form) stays put.
+        if (onHome) { var w = window.open('./universities.html', '_blank'); if (w) w.opener = null; else window.location.href = './universities.html'; }
         else { close(); window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' }); }
         return;
       }
@@ -1959,6 +2124,46 @@
   var LABELLED = { 'Dublin': 1, 'Cork': 1, 'Galway': 1, 'Limerick': 1, 'Sligo': 1, 'Waterford': 1, 'Letterkenny': 1, 'Athlone': 1 };
   var TYPE_ORDER = ['University', 'Technological University', 'Institute of Technology', 'Specialist', 'College', 'Language School'];
 
+  /* Compare: facts come from the dataset and the QS tables in its header;
+     entry rules are the typical ones for each statutory category, labelled as
+     typical because the exact rule always depends on the course. */
+  var QS_EU_2026 = { 1: '29', 2: '38', 3: '95', 4: '98', 5: '132', 6: '139', 7: '=254', 8: '=269', 9: '501-510', 10: '651-700', 11: '651-700', 12: '701-900' };
+  var QS_WORLD_2027 = { 1: '75', 2: '=100', 3: '220', 4: '275', 5: '408', 6: '=388', 7: '791-800', 8: '721-730' };
+  var REQS = {
+    University: {
+      ug: 'Class 12 with strong marks: typically 75-90%+ for competitive courses',
+      pg: "Relevant bachelor's, typically 60-70%+ (a 2.1 equivalent)",
+      en: 'IELTS 6.5 overall, no band below 6.0 (typical)'
+    },
+    'Technological University': {
+      ug: 'Class 12, typically 60-75% depending on the course',
+      pg: "Relevant bachelor's, typically 55-65%+",
+      en: 'IELTS 6.0-6.5 overall (typical)'
+    },
+    'Institute of Technology': {
+      ug: 'Class 12, typically 60-70%',
+      pg: "Relevant bachelor's, typically 55-60%+",
+      en: 'IELTS 6.0-6.5 overall (typical)'
+    },
+    Specialist: {
+      ug: 'Class 12, typically 60%+; portfolio, audition or interview for some courses',
+      pg: "Relevant bachelor's, typically 55-60%+; portfolio for creative courses",
+      en: 'IELTS 6.0-6.5 overall (typical)'
+    },
+    College: {
+      ug: 'Class 12, typically 55-65%',
+      pg: "Bachelor's in a related field, typically 55%+",
+      en: 'IELTS 6.0-6.5 overall (typical)'
+    },
+    'Language School': {
+      ug: 'No academic entry requirement',
+      pg: 'Not applicable: English language courses',
+      en: 'Any level: a placement test puts you in the right class'
+    }
+  };
+  var HE_STAY = "Stay Back: 1 year after a Level 8 degree, 2 years after a Level 9 Master's";
+  var HE_WORK = '20 hours a week in term, 40 in holidays';
+
   function fold(str) { return String(str || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
   function cityOf(u) { return String(u.location || '').split(',')[0].trim(); }
 
@@ -1970,6 +2175,8 @@
     var state = { q: '', type: 'All', city: null, sort: 'rank', view: 'grid', shown: 24 };
     var PAGE = 24;
     var selected = [];
+    var compare = [];
+    var CMP_MAX = 3;
     var filtered = all;
 
     var search = $('[data-uni-search]'), clearBtn = $('[data-uni-clear]');
@@ -2104,6 +2311,7 @@
         '<p class="uloc">' + icon('i-pin') + esc(u.location) + '</p>' +
         (subjects.length ? '<div class="subjects">' + subjects.map(function (s) { return '<span>' + esc(s) + '</span>'; }).join('') + '</div>' : '') +
         '<div class="ucard__foot"><div>Eligible courses<b>' + esc(u.programmes || '—') + '</b></div>' +
+        '<button class="cmp-pick" type="button" data-cmp="' + esc(u.name) + '" aria-pressed="' + (compare.indexOf(u.name) > -1) + '">' + icon(compare.indexOf(u.name) > -1 ? 'i-check' : 'i-plus') + '<span>Compare</span></button>' +
         '<button class="pick" type="button" data-pick="' + esc(u.name) + '" aria-pressed="' + on + '"><i>' + icon(on ? 'i-check' : 'i-plus') + '</i>' + (on ? 'Shortlisted' : 'Shortlist') + '</button></div>' +
         '</article>';
     }
@@ -2130,7 +2338,151 @@
         b.setAttribute('data-bound', '1');
         b.addEventListener('click', function () { toggle(b.getAttribute('data-pick'), b); });
       });
+      $$('[data-cmp]:not([data-bound])', grid).forEach(function (b) {
+        b.setAttribute('data-bound', '1');
+        b.addEventListener('click', function () { toggleCompare(b.getAttribute('data-cmp')); });
+      });
     }
+
+    /* --- Compare (two or three side by side) --- */
+    var cmpBar = document.createElement('div');
+    cmpBar.className = 'cmpbar';
+    cmpBar.setAttribute('aria-live', 'polite');
+    document.body.appendChild(cmpBar);
+    var cmpBox = document.createElement('div');
+    cmpBox.className = 'cmp';
+    cmpBox.setAttribute('role', 'dialog');
+    cmpBox.setAttribute('aria-modal', 'true');
+    cmpBox.setAttribute('aria-label', 'Compare institutions');
+    cmpBox.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(cmpBox);
+    var cmpFocus = null, cmpCourse = '';
+
+    function byName(n) { for (var i = 0; i < all.length; i++) if (all[i].name === n) return all[i]; return null; }
+    function subjectsOf(u) { return String(u.programs || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean); }
+
+    function toggleCompare(name) {
+      var i = compare.indexOf(name);
+      if (i > -1) compare.splice(i, 1);
+      else {
+        if (compare.length >= CMP_MAX) { cmpBar.classList.remove('shake'); void cmpBar.offsetWidth; cmpBar.classList.add('shake'); return; }
+        compare.push(name);
+      }
+      paintCompare();
+    }
+    function paintCompare() {
+      $$('[data-cmp]', grid).forEach(function (b) {
+        var on = compare.indexOf(b.getAttribute('data-cmp')) > -1;
+        b.setAttribute('aria-pressed', on);
+        b.innerHTML = icon(on ? 'i-check' : 'i-plus') + '<span>Compare</span>';
+      });
+      var n = compare.length;
+      cmpBar.classList.toggle('is-on', n > 0);
+      document.body.classList.toggle('has-cmp', n > 0);
+      cmpBar.innerHTML = '<div class="cmpbar__slots">' + compare.map(function (c) {
+        return '<span>' + esc(c) + '<button type="button" data-cmp-drop="' + esc(c) + '" aria-label="Remove ' + esc(c) + ' from compare">' + icon('i-x') + '</button></span>';
+      }).join('') + (n < CMP_MAX ? '<span class="is-empty">' + (n === 1 ? 'Pick one more to compare' : 'Add a third (optional)') + '</span>' : '') + '</div>' +
+        '<button class="btn" type="button" data-cmp-open' + (n < 2 ? ' disabled' : '') + '>Compare' + (n > 1 ? ' ' + n : '') + '</button>';
+      $$('[data-cmp-drop]', cmpBar).forEach(function (b) { b.addEventListener('click', function () { toggleCompare(b.getAttribute('data-cmp-drop')); }); });
+      $('[data-cmp-open]', cmpBar).addEventListener('click', openCompare);
+      if (cmpBox.classList.contains('is-open')) { if (n < 2) closeCompare(); else paintTable(); }
+    }
+
+    function paintTable() {
+      var us = compare.map(byName).filter(Boolean);
+      var subs = us.map(subjectsOf);
+      var shared = subs.length > 1 ? subs[0].filter(function (x) { return subs.every(function (l) { return l.indexOf(x) > -1; }); }) : [];
+      // A short stem, so "Computing" also finds "Computer Science"
+      var q = fold(cmpCourse.trim()); if (q.length > 5) q = q.slice(0, 5);
+      var lang = function (u) { return u.type === 'Language School'; };
+      var req = function (u) { return REQS[u.type] || REQS.College; };
+      function row(label, cells, cls) {
+        return '<div class="cmp__row' + (cls ? ' ' + cls : '') + '"><div class="cmp__lab">' + label + '</div>' +
+          cells.map(function (c) { return '<div class="cmp__cell">' + c + '</div>'; }).join('') + '</div>';
+      }
+      var muted = function (t) { return '<span class="cmp__muted">' + t + '</span>'; };
+      cmpBox.innerHTML = '<div class="cmp__panel">' +
+        '<div class="cmp__head"><div><p class="kicker">Compare</p><h2>Courses and requirements, side by side</h2></div>' +
+        '<button class="cmp__close" type="button" data-cmp-close aria-label="Close comparison">' + icon('i-x') + '</button></div>' +
+        '<label class="cmp__search">' + icon('i-search') + '<span class="sr-only">Check a subject</span><input type="search" placeholder="Check a subject, e.g. Business, Computing, Nursing" value="' + esc(cmpCourse) + '" data-cmp-course></label>' +
+        '<div class="cmp__scroll"><div class="cmp__grid" style="--n:' + us.length + '">' +
+        '<div class="cmp__row cmp__row--names"><div class="cmp__lab"></div>' + us.map(function (u) {
+          return '<div class="cmp__cell"><span class="utype" data-t="' + esc(u.type) + '">' + esc(u.type) + '</span><h3>' + esc(u.name) + '</h3><p class="uloc">' + icon('i-pin') + esc(u.location) + '</p></div>';
+        }).join('') + '</div>' +
+        '<div class="cmp__sec">Courses</div>' +
+        row('Eligible courses on the official register', us.map(function (u) { return '<b class="cmp__big">' + esc(u.programmes || '—') + '</b>'; })) +
+        row('Key subject areas', us.map(function (u, i) {
+          return '<div class="subjects">' + subs[i].map(function (x) {
+            var cls = (shared.indexOf(x) > -1 ? 'is-shared' : '') + (q && fold(x).indexOf(q) > -1 ? ' is-hit' : '');
+            return '<span class="' + cls + '">' + esc(x) + '</span>';
+          }).join('') + '</div>';
+        })) +
+        (q ? row('&ldquo;' + esc(cmpCourse.trim()) + '&rdquo;', us.map(function (u, i) {
+          var hit = subs[i].some(function (x) { return fold(x).indexOf(q) > -1; });
+          return hit ? '<span class="cmp__yes">' + icon('i-check') + 'A key subject area</span>' : muted('Not a headline area. Ask us: it may still be on the register.');
+        }), 'is-q') : '') +
+        '<div class="cmp__sec">Rankings</div>' +
+        row('QS Europe 2026', us.map(function (u) { return u.ranked && QS_EU_2026[u.rank] ? '<b class="cmp__big">' + QS_EU_2026[u.rank] + '</b>' : muted('Not ranked'); })) +
+        row('QS World 2027', us.map(function (u) { return u.ranked && QS_WORLD_2027[u.rank] ? '<b class="cmp__big">' + QS_WORLD_2027[u.rank] + '</b>' : muted('Not ranked'); })) +
+        '<div class="cmp__sec">Typical requirements</div>' +
+        row("Bachelor's entry", us.map(function (u) { return esc(req(u).ug); })) +
+        row("Master's entry", us.map(function (u) { return esc(req(u).pg); })) +
+        row('English', us.map(function (u) { return esc(req(u).en); })) +
+        '<div class="cmp__sec">While you study and after</div>' +
+        row('Part-time work', us.map(function (u) { return lang(u) ? '20 hours a week in term, on a course of 25 weeks or more' : HE_WORK; })) +
+        row('Stay back after graduating', us.map(function (u) { return lang(u) ? muted('Not eligible: English courses do not lead to the graduate programme') : esc(HE_STAY); })) +
+        '<div class="cmp__row cmp__row--act"><div class="cmp__lab"></div>' + us.map(function (u) {
+          var on = selected.indexOf(u.name) > -1;
+          return '<div class="cmp__cell"><button class="pick" type="button" data-cmp-pick="' + esc(u.name) + '" aria-pressed="' + on + '"><i>' + icon(on ? 'i-check' : 'i-plus') + '</i>' + (on ? 'Shortlisted' : 'Shortlist') + '</button>' +
+            '<button class="cmp__drop" type="button" data-cmp-drop="' + esc(u.name) + '">Remove</button></div>';
+        }).join('') + '</div>' +
+        '</div></div>' +
+        '<p class="cmp__note">Requirements shown are typical for each type of institution. The exact rule depends on the course and intake; we confirm it for you in your free counselling session.</p>' +
+        '<div class="cmp__foot"><button class="btn btn--dark" type="button" data-cmp-book>Book free counselling for these ' + icon('i-arrow') + '</button></div>' +
+        '</div>';
+      $('[data-cmp-close]', cmpBox).addEventListener('click', closeCompare);
+      var ci = $('[data-cmp-course]', cmpBox);
+      ci.addEventListener('input', function () {
+        cmpCourse = ci.value;
+        var pos = ci.selectionStart, top = $('.cmp__scroll', cmpBox).scrollTop;
+        paintTable();
+        var n2 = $('[data-cmp-course]', cmpBox);
+        n2.focus({ preventScroll: true });
+        try { n2.setSelectionRange(pos, pos); } catch (err) { /* type=search */ }
+        $('.cmp__scroll', cmpBox).scrollTop = top;
+      });
+      $$('[data-cmp-drop]', cmpBox).forEach(function (b) { b.addEventListener('click', function () { toggleCompare(b.getAttribute('data-cmp-drop')); }); });
+      $$('[data-cmp-pick]', cmpBox).forEach(function (b) {
+        b.addEventListener('click', function () {
+          var name = b.getAttribute('data-cmp-pick');
+          var gb = $$('[data-pick]', grid).filter(function (x) { return x.getAttribute('data-pick') === name; })[0];
+          if (gb) toggle(name, gb);
+          else { var k = selected.indexOf(name); if (k > -1) selected.splice(k, 1); else selected.push(name); paintTray(); }
+          paintTable();
+        });
+      });
+      $('[data-cmp-book]', cmpBox).addEventListener('click', function () {
+        us.forEach(function (u) { if (selected.indexOf(u.name) < 0) selected.push(u.name); });
+        try { localStorage.setItem('tcShortlist', JSON.stringify(selected)); } catch (err) { /* storage off */ }
+        window.location.href = './index.html#contact';
+      });
+    }
+    function openCompare() {
+      if (compare.length < 2) return;
+      cmpFocus = document.activeElement;
+      paintTable();
+      cmpBox.classList.add('is-open'); cmpBox.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+      setTimeout(function () { var c = $('[data-cmp-close]', cmpBox); if (c) c.focus({ preventScroll: true }); }, 50);
+    }
+    function closeCompare() {
+      if (!cmpBox.classList.contains('is-open')) return;
+      cmpBox.classList.remove('is-open'); cmpBox.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+      if (cmpFocus && cmpFocus.focus && document.contains(cmpFocus)) cmpFocus.focus({ preventScroll: true });
+    }
+    cmpBox.addEventListener('click', function (e) { if (e.target === cmpBox) closeCompare(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeCompare(); });
 
     function toggle(name, btn) {
       var i = selected.indexOf(name);
@@ -2249,6 +2601,7 @@
     stats();
     apply(true);
     paintTray();
+    paintCompare();
   }
 
   /* ------------------------------------------------------------------ *

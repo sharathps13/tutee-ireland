@@ -81,7 +81,7 @@ const COUNTRY_ALIASES = {
 
 const FIELD_LIMITS = {
   name: 120, email: 200, phone: 40, destination: 600, subject: 200, from_name: 120,
-  note: 250, preferred_colleges: 1200,
+  note: 250, preferred_colleges: 1200, state: 80,
 };
 
 // Fields this handler consumes by name. Anything else the form grows later is
@@ -90,7 +90,7 @@ const FIELD_LIMITS = {
 // because this file has not been updated to know about it.
 const KNOWN_FIELDS = new Set(['name', 'email', 'phone', 'phone_number',
   'country_code', 'destination', 'from_name', 'page', 'botcheck',
-  'access_key', 'subject', 'note', 'preferred_colleges']);
+  'access_key', 'subject', 'note', 'preferred_colleges', 'state']);
 const MAX_EXTRA_FIELDS = 12;
 
 /** Collapse whitespace and strip CR/LF.
@@ -168,6 +168,7 @@ export function parsePayload(raw) {
     // never a header. Control characters other than newlines are dropped.
     note: String(data.note ?? '').replace(/\r\n?/g, '\n').replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, '')
       .replace(/\n{3,}/g, '\n\n').trim().slice(0, FIELD_LIMITS.note),
+    state: clean(data.state, FIELD_LIMITS.state),
     colleges: clean(data.preferred_colleges, FIELD_LIMITS.preferred_colleges),
     extras,
     botcheck: data.botcheck,
@@ -204,6 +205,7 @@ export function buildEmail(f, country) {
     ['Email Address', f.email],
     ['Enquiry Type / Country', f.destination],
   ];
+  if (f.state) rows.push(['State / Region', f.state]);
   if (f.colleges) rows.push(['Preferred Colleges', f.colleges]);
   if (f.note) rows.push(['Note from Student', f.note]);
   if (country) rows.push(['Landing Page', country]);

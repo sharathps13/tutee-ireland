@@ -165,7 +165,7 @@
 
   // Elements whose text is not content worth answering from.
   var SKIP = 'script, style, svg, nav, header, .drawer, .rail, .dock, [data-chat], .chat, .sheet, .modal, .progress, ' +
-    '[aria-hidden="true"], form, .skip, .band--news, .deck__ui, .tray';
+    '[aria-hidden="true"], form, .skip, .band--news, .newsban, .deck__ui, .tray';
 
   function fromDocument(doc, page) {
     var root = doc.querySelector('main') || doc.body;
@@ -178,7 +178,7 @@
       });
       // Loan partners appear only as logos
       [].slice.call(r.querySelectorAll('.logo-wall')).forEach(function (w) {
-        var names = [].slice.call(w.querySelectorAll('img[alt]')).map(function (i) { return i.getAttribute('alt'); }).filter(Boolean);
+        var names = [].slice.call(w.querySelectorAll('img[alt], [role=img][aria-label]')).map(function (i) { return i.getAttribute('alt') || i.getAttribute('aria-label'); }).filter(Boolean);
         if (names.length) add({ title: 'Education loan partners, banks and lenders', kind: 'list',
           text: 'Our education loan partners include ' + names.join(', ') + ', and many more trusted lending partners. Together they offer collateral and non-collateral education loans.',
           sec: sectionInfo(w, page) });

@@ -269,19 +269,30 @@
 </section>
 
 <!-- ======================= LIVE NEWS ======================= -->
-<!-- Headlines come from /api/news (netlify/functions/news.mjs). The links
-     below are the fallback, shown until the feed answers or if it can't. -->
-<section class="band band--news" aria-labelledby="news-label" data-news>
-  <div class="band__row">
-    <h2 class="band__label" id="news-label"><span class="live-dot" aria-hidden="true"></span>Ireland <br>news <small data-news-status>Study &amp; work</small></h2>
-    <div class="marquee" data-news-marquee style="--dur:90s">
-      <div class="marquee__track" data-news-track>
-        <a class="news" href="https://www.irishimmigration.ie/coming-to-study-in-ireland/" target="_blank" rel="noopener"><span class="news__tag">Visas</span><span class="news__title">Coming to study in Ireland: the official student permission guide</span><span class="news__meta">Irish Immigration Service</span></a>
-        <a class="news" href="https://www.educationinireland.com/" target="_blank" rel="noopener"><span class="news__tag">Universities</span><span class="news__title">Explore Irish universities, courses and scholarships</span><span class="news__meta">Education in Ireland</span></a>
-        <a class="news" href="https://enterprise.gov.ie/en/what-we-do/workplace-and-skills/employment-permits/" target="_blank" rel="noopener"><span class="news__tag">Careers</span><span class="news__title">Employment permits, including the Critical Skills route to Stamp 4</span><span class="news__meta">Department of Enterprise</span></a>
-        <a class="news" href="https://www.irishimmigration.ie/my-situation-has-changed-since-i-arrived-in-ireland/third-level-graduate-programme/" target="_blank" rel="noopener"><span class="news__tag">Students</span><span class="news__title">Third Level Graduate Programme: stay and work after you graduate</span><span class="news__meta">Irish Immigration Service</span></a>
+<!-- A rotating banner: one featured story with a photo, the next few beside it.
+     Headlines come from /api/news (netlify/functions/news.mjs); the list below
+     is the fallback, shown until the feed answers or if it can't. Photos are
+     Irish scenes chosen by topic (see NEWS_PHOTOS in main.js). -->
+<section class="newsban" aria-labelledby="news-label" data-news>
+  <div class="wrap">
+    <div class="newsban__head">
+      <h2 class="newsban__label" id="news-label"><span class="live-dot" aria-hidden="true"></span>Ireland news<small data-news-status>Study &amp; work</small></h2>
+      <div class="newsban__nav">
+        <span class="newsban__count" data-news-count aria-hidden="true"></span>
+        <button type="button" data-news-prev aria-label="Previous story"><svg aria-hidden="true"><use href="#i-chev-l"/></svg></button>
+        <button type="button" data-news-next aria-label="Next story"><svg aria-hidden="true"><use href="#i-chev-r"/></svg></button>
       </div>
     </div>
+    <div class="newsban__stage">
+      <div class="newsban__feature" data-news-feature></div>
+      <ol class="newsban__list" data-news-list aria-label="More stories"></ol>
+    </div>
+    <ul class="hidden" data-news-fallback>
+      <li><a href="https://www.irishimmigration.ie/coming-to-study-in-ireland/" target="_blank" rel="noopener" data-tag="Visas" data-source="Irish Immigration Service">Coming to study in Ireland: the official student permission guide</a></li>
+      <li><a href="https://www.educationinireland.com/" target="_blank" rel="noopener" data-tag="Universities" data-source="Education in Ireland">Explore Irish universities, courses and scholarships</a></li>
+      <li><a href="https://enterprise.gov.ie/en/what-we-do/workplace-and-skills/employment-permits/" target="_blank" rel="noopener" data-tag="Careers" data-source="Department of Enterprise">Employment permits, including the Critical Skills route to Stamp 4</a></li>
+      <li><a href="https://www.irishimmigration.ie/my-situation-has-changed-since-i-arrived-in-ireland/third-level-graduate-programme/" target="_blank" rel="noopener" data-tag="Students" data-source="Irish Immigration Service">Third Level Graduate Programme: stay and work after you graduate</a></li>
+    </ul>
   </div>
 </section>
 
@@ -399,7 +410,7 @@
           <li><button class="board__row" type="button" aria-pressed="false" data-rank="11" data-code="WAT" data-city="Waterford" data-name="South East Technological University, Waterford" data-type="Technological University" data-courses="199" data-subjects="Engineering, Business, Health Science, Computing, Architecture"><span class="board__rank">11</span><span class="flap" aria-hidden="true"><b>W</b><b>A</b><b>T</b></span><span class="board__name"><em>South East Technological University, Waterford</em><small>Waterford</small></span><span class="board__courses">199</span><svg class="board__go" aria-hidden="true"><use href="#i-chev-r"/></svg></button></li>
           <li><button class="board__row" type="button" aria-pressed="false" data-rank="12" data-code="DUB" data-city="Dublin" data-name="National College of Ireland" data-type="College" data-courses="51" data-subjects="Computing, Business, Data Analytics, Psychology, Fintech"><span class="board__rank">12</span><span class="flap" aria-hidden="true"><b>D</b><b>U</b><b>B</b></span><span class="board__name"><em>National College of Ireland</em><small>Dublin</small></span><span class="board__courses">51</span><svg class="board__go" aria-hidden="true"><use href="#i-chev-r"/></svg></button></li>
         </ol>
-        <div class="board__foot"><span>Course counts are eligible programmes on Ireland's official registers.</span><a class="link" style="color:var(--gold)" href="./universities.html">See all 113 institutions</a></div>
+        <div class="board__foot"><span>Course counts are eligible programmes on Ireland's official registers.</span><a class="link" style="color:var(--gold)" href="./universities.html" target="_blank" rel="noopener">See all 113 institutions</a></div>
       </div>
 
       <article class="pass pass--big" data-pass aria-live="polite">
@@ -477,7 +488,9 @@
             <figure style="--i:7"><img decoding="async" src="./assets/img/loan-partner/incred.jpg" alt="InCred" loading="lazy"></figure>
             <figure style="--i:8"><img decoding="async" src="./assets/img/loan-partner/mpower.jpg" alt="MPOWER Financing" loading="lazy"></figure>
             <figure style="--i:9"><img decoding="async" src="./assets/img/loan-partner/prodigy.jpg" alt="Prodigy Finance" loading="lazy"></figure>
-            <figure class="more" style="--i:10;grid-column:span 2">And many more trusted lending partners</figure>
+            <figure class="wordmark" style="--i:10"><span role="img" aria-label="Tata Capital"><b>TATA</b> CAPITAL</span></figure>
+            <figure class="wordmark" style="--i:11"><span role="img" aria-label="Poonawalla Fincorp"><b>Poonawalla</b> Fincorp</span></figure>
+            <figure class="more" style="--i:12;grid-column:1 / -1">And many more trusted lending partners</figure>
           </div>
         </div>
       </div>
@@ -682,6 +695,7 @@
             <fieldset class="tstep is-active" data-tstep="1">
               <legend>Who's flying?</legend>
               <div class="field"><input id="f-name" name="name" type="text" placeholder=" " autocomplete="name" required><label for="f-name">Your full name</label><svg><use href="#i-user"/></svg></div>
+              <div class="field field--select"><select id="f-state" name="state" required data-state><option value="" selected disabled hidden></option><optgroup label="India"><option>Andhra Pradesh</option><option>Arunachal Pradesh</option><option>Assam</option><option>Bihar</option><option>Chhattisgarh</option><option>Goa</option><option>Gujarat</option><option>Haryana</option><option>Himachal Pradesh</option><option>Jharkhand</option><option>Karnataka</option><option>Kerala</option><option>Madhya Pradesh</option><option>Maharashtra</option><option>Manipur</option><option>Meghalaya</option><option>Mizoram</option><option>Nagaland</option><option>Odisha</option><option>Punjab</option><option>Rajasthan</option><option>Sikkim</option><option>Tamil Nadu</option><option>Telangana</option><option>Tripura</option><option>Uttar Pradesh</option><option>Uttarakhand</option><option>West Bengal</option><option>Andaman and Nicobar Islands</option><option>Chandigarh</option><option>Dadra and Nagar Haveli and Daman and Diu</option><option>Delhi</option><option>Jammu and Kashmir</option><option>Ladakh</option><option>Lakshadweep</option><option>Puducherry</option></optgroup><optgroup label="Outside India"><option>United Arab Emirates</option><option>Other country</option></optgroup></select><label for="f-state">Which state are you from?</label><svg><use href="#i-pin"/></svg></div>
               <span class="topics-label" id="topics-label">What's your trip about?</span>
               <div class="topics" role="group" aria-labelledby="topics-label" data-topics>
                 <button class="topic" type="button" aria-pressed="false" data-topic="Admissions"><svg><use href="#i-cap"/></svg>Admissions</button>
@@ -692,7 +706,7 @@
               <div class="prefs hidden" data-prefs>
                 <span class="topics-label">Your preferred colleges</span>
                 <ul class="prefs__list" data-prefs-list></ul>
-                <a class="prefs__edit" href="./universities.html">Add or change colleges</a>
+                <a class="prefs__edit" href="./universities.html" target="_blank" rel="noopener">Add or change colleges</a>
               </div>
               <input type="hidden" name="preferred_colleges" value="" data-prefs-input>
               <div class="tstep__row"><button class="btn btn--dark" type="button" data-tnext>Continue to contact details <svg><use href="#i-arrow"/></svg></button></div>
@@ -768,7 +782,7 @@
         <ul>
           <li><a href="https://tuteeconnect.com/" target="_blank" rel="noopener noreferrer">Tutee Connect home</a></li>
           <li><a href="https://tuteeconnect.com/about.html" target="_blank" rel="noopener noreferrer">About us</a></li>
-          <li><a href="./universities.html">Irish universities</a></li>
+          <li><a href="./universities.html" target="_blank" rel="noopener">Irish universities</a></li>
           <li><a href="https://tuteeconnect.com/profile-registration.html" target="_blank" rel="noopener noreferrer">Profile registration</a></li>
           <li><a href="https://tuteeconnect.com/contact.html" target="_blank" rel="noopener noreferrer">Contact us</a></li>
         </ul>
@@ -787,10 +801,24 @@
       <div>
         <p style="margin:0 0 6px">© 2026 Tutee Connect. All rights reserved. <a href="https://tuteeconnect.com/terms-and-conditions.html" target="_blank" rel="noopener noreferrer">Terms</a> and <a href="https://tuteeconnect.com/privacy-policy.html" target="_blank" rel="noopener noreferrer">Privacy</a></p>
         <p class="footer__credit" data-photo-credit>Photography: Long Room, Trinity College Library © Zairon (CC BY 4.0); Georgian doors, Dublin © Leandro Neumann Ciuffo (CC BY 2.0), via Wikimedia Commons. All other photographs via Unsplash, used under the Unsplash License.</p>
-      </div>
+      </div>
+
     </div>
   </div>
 </footer>
+
+<!-- Shown once if someone starts the boarding pass and then heads away from it -->
+<div class="leave" data-leave role="alertdialog" aria-modal="true" aria-labelledby="leave-title" aria-describedby="leave-text" aria-hidden="true">
+  <div class="leave__card">
+    <span class="leave__icon"><svg aria-hidden="true"><use href="#i-plane"/></svg></span>
+    <h3 id="leave-title">Your boarding pass isn't complete</h3>
+    <p id="leave-text">You've started checking in for your free counselling session. It only takes a few more seconds to finish. Leave without booking?</p>
+    <div class="leave__row">
+      <button class="btn btn--dark" type="button" data-leave-stay>Finish my boarding pass</button>
+      <button class="tback" type="button" data-leave-go>Leave anyway</button>
+    </div>
+  </div>
+</div>
 
 <!-- ======================= CHAT ======================= -->
 <!-- Quick contact dock: Tutee AI on the left, Reserve a call + WhatsApp on the right.
@@ -798,8 +826,8 @@
 <div class="dock" aria-label="Quick contact">
   <button class="chat-launch" type="button" data-chat-open aria-label="Chat with Tutee AI"><img src="./assets/img/logo/icon-dark-44.png" srcset="./assets/img/logo/icon-dark-44.png 1x, ./assets/img/logo/icon-dark-88.png 2x, ./assets/img/logo/icon-dark-132.png 3x" alt="" width="44" height="44"><span>Ask Tutee AI<small>Instant guidance</small></span></button>
   <div class="dock__right">
-    <a class="dock__call" href="./index.html#contact" data-scroll-to="contact"><svg aria-hidden="true"><use href="#i-phone"/></svg><span>Reserve a call</span></a>
     <a class="dock__wa" href="https://wa.me/917358364959?text=Hi%20Tutee%20Connect%2C%20I%27d%20like%20to%20know%20more%20about%20studying%20in%20Ireland." target="_blank" rel="noopener noreferrer" aria-label="Chat with us on WhatsApp"><svg aria-hidden="true"><use href="#i-whatsapp"/></svg><span>WhatsApp</span></a>
+    <a class="dock__call" aria-label="Reserve a call" title="Reserve a call" href="./index.html#contact" data-scroll-to="contact"><svg aria-hidden="true"><use href="#i-phone"/></svg><span>Reserve a call</span></a>
   </div>
 </div>
 <div class="chat" data-chat role="dialog" aria-label="Tutee AI counsellor" aria-hidden="true">

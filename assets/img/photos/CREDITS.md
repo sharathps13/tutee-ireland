@@ -203,6 +203,10 @@ still used, so the footer credit line names only those two. `students-campus.jpg
 | Services: family migration | Father and daughter at an airport gate | m8TQz6FRrUk | Rochelle Lee |
 | Free counselling | Students at a table | g1Kr4Ozfoac | Brooke Cagle |
 
+The Ireland news banner reuses photos from this table (no new sources): `NEWS_PHOTOS` in
+`assets/js/main.js` picks one per story by topic, or by place when the headline names Trinity,
+UCC or Galway. The news feed itself carries no images, and publishers' photos are not reused.
+
 Each is viewable at `https://unsplash.com/photos/<id>`. To self-host instead, download each at
 roughly 2000px wide, save under this folder, swap the `src` URLs, and `images.unsplash.com` can be
 dropped from the CSP.
