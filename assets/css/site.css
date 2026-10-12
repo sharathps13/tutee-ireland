@@ -1738,11 +1738,14 @@ body.has-tray .dock { bottom: 92px; }
 .dock__call svg { width: 24px; height: 24px; }
 .dock__call span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @media (max-width: 640px) {
-  /* The phone bar is one row: Tutee AI fills the left, the two icons sit right */
-  .chat-launch { flex: 1; min-width: 0; }
-  .dock__right { flex: none; flex-direction: row; gap: 8px; }
-  .dock__call { flex: none; width: 48px; height: 48px; padding: 0; }
-  .dock__call svg { width: 21px; height: 21px; }
+  /* The phone bar is one row: Tutee AI, then "Reserve a call" with its label
+     filling the middle, then the WhatsApp icon */
+  .chat-launch { flex: none; }
+  .dock__right { flex: 1; min-width: 0; flex-direction: row; gap: 8px; }
+  .dock__call { flex: 1; min-width: 0; width: auto; height: 48px; padding: 0 12px; gap: 7px; font-size: .84rem; white-space: nowrap; }
+  .dock__call svg { width: 17px; height: 17px; flex: none; }
+  .dock__call span { position: static; width: auto; height: auto; overflow: hidden; clip: auto; text-overflow: ellipsis; }
+  .dock__wa { order: 2; }
 }
 
 /* ---------- Directory filters: every chip visible, wrapping instead of scrolling ---------- */
