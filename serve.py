@@ -12,7 +12,9 @@ Serves from this file's own directory, so it doesn't matter where you run it
 from. Sends no-cache headers so a browser reload always shows your latest edit.
 
 Also answers GET /api/news, a port of netlify/functions/news.mjs, so the live
-news ticker works in a local preview too. Keep the two in step.
+news banner works in a local preview too. It runs the real function through
+Node when available (the same publisher feeds and pictures as production),
+else a simpler Python fallback with headlines only.
 """
 import email.utils
 import html
@@ -39,7 +41,9 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
 # ------------------------------------------------------------ /api/news
-# Mirrors netlify/functions/news.mjs: same searches, same filters.
+# Normally /api/news runs netlify/functions/news.mjs itself through Node (see
+# _news_via_node). The Python below is only a fallback for machines without
+# Node: older Google News headlines, no pictures (the page adds stock photos).
 NEWS_TOPICS = [
     ('Universities', '("Irish universities" OR "Trinity College Dublin" OR UCD OR "University College Cork" OR "University of Galway" OR DCU OR "University of Limerick" OR "TU Dublin" OR "Maynooth University") when:14d',
      r'universit|college|campus|student|research|scholar|degree|graduat|lecturer|professor|academ|programme|course'),
@@ -107,10 +111,38 @@ def _news_topic(tag, query, about):
     return items
 
 
+_NEWS_NODE = r'''
+const m = await import(process.argv[1]);
+const res = await m.default(new Request('http://localhost/api/news'));
+process.stdout.write(JSON.stringify({ status: res.status, body: await res.text() }));
+'''
+
+
+def _news_via_node():
+    """Run the real Netlify function (resolves article links and pictures),
+    so the local preview matches production. None if Node isn't available."""
+    import subprocess
+    fn = os.path.join(ROOT, 'netlify', 'functions', 'news.mjs')
+    url = 'file:///' + fn.replace(os.sep, '/').lstrip('/')
+    try:
+        out = subprocess.run(['node', '--input-type=module', '-e', _NEWS_NODE, url],
+                             capture_output=True, timeout=30, check=True).stdout
+        data = json.loads(out.decode('utf-8'))
+        return data['status'], data['body'].encode('utf-8')
+    except Exception as exc:
+        sys.stderr.write('  news (node): %s\n' % exc)
+        return None
+
+
 def news_body():
     with _news_lock:
         if _news_cache['body'] and time.time() - _news_cache['at'] < NEWS_TTL:
             return 200, _news_cache['body']
+        via = _news_via_node()
+        if via and via[0] == 200:
+            _news_cache.update(at=time.time(), body=via[1])
+            return via
+        # No Node: the Python port below (headlines only, no pictures)
         seen, picked = set(), []
         for topic in NEWS_TOPICS:
             kept = []

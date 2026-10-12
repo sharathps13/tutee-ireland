@@ -76,6 +76,7 @@
     <symbol id="i-shamrock" viewBox="0 0 24 24"><g fill="currentColor"><path d="M12 11.2C9.6 9.5 7.9 8 7.9 6.1a2.3 2.3 0 0 1 4.1-1.4 2.3 2.3 0 0 1 4.1 1.4c0 1.9-1.7 3.4-4.1 5.1z"/><path d="M11.4 12.6c-1.9 2.2-3.6 3.8-5.5 3.6a2.3 2.3 0 0 1-1-4.2 2.3 2.3 0 0 1 1.6-3.9c1.9.2 3.3 2 4.9 4.5z"/><path d="M12.6 12.6c1.9 2.2 3.6 3.8 5.5 3.6a2.3 2.3 0 0 0 1-4.2 2.3 2.3 0 0 0-1.6-3.9c-1.9.2-3.3 2-4.9 4.5z"/></g><path d="M12 12.5c.3 3.6 1.4 6.6 3.6 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
     <symbol id="i-knot" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><g id="knot-arm"><path d="M50 50c0-12 9-20 19-20s16 7 16 15-6 13-12 13-10-4-10-9 3-7 6-7"/></g><use href="#knot-arm" transform="rotate(120 50 50)"/><use href="#knot-arm" transform="rotate(240 50 50)"/><circle cx="50" cy="50" r="46" stroke-dasharray="2 7"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+    <symbol id="i-filter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18"/><path d="M6 12h12"/><path d="M10 19h4"/></symbol>
     <symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
     <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
   </defs>
@@ -160,17 +161,51 @@
 </section>
 
 <!-- ======================= FILTERS ======================= -->
+<!-- Everything lives behind one Filters button: course area, type, city and sort.
+     The chips beside it show what is applied and remove it in one tap. -->
 <div class="filters" data-filters>
   <div class="wrap filters__row">
-    <div class="chipset" data-uni-types role="group" aria-label="Filter by type"></div>
-    <label class="sr-only" for="uni-sort">Sort</label>
-    <select class="sort" id="uni-sort" data-uni-sort>
-      <option value="rank">Ranked first</option>
-      <option value="az">A to Z</option>
-    </select>
+    <button class="fbtn" type="button" data-filter-open aria-expanded="false" aria-controls="filter-panel">
+      <svg aria-hidden="true"><use href="#i-filter"/></svg><span>Filters</span><b class="fbtn__n" data-filter-n hidden>0</b>
+    </button>
+    <div class="factive" data-filter-active aria-live="polite"></div>
     <div class="view-toggle" role="group" aria-label="Layout">
       <button type="button" data-view="grid" aria-pressed="true" aria-label="Grid view"><svg><use href="#i-grid"/></svg></button>
       <button type="button" data-view="list" aria-pressed="false" aria-label="List view"><svg><use href="#i-list"/></svg></button>
+    </div>
+  </div>
+  <div class="fscrim" data-filter-close></div>
+  <div class="fpanel" id="filter-panel" role="dialog" aria-label="Filter institutions" aria-hidden="true" data-filter-panel>
+    <div class="fpanel__head">
+      <h3><svg aria-hidden="true"><use href="#i-filter"/></svg>Filters</h3>
+      <button class="fpanel__x" type="button" data-filter-close aria-label="Close filters"><svg><use href="#i-x"/></svg></button>
+    </div>
+    <div class="fpanel__body">
+      <section>
+        <h4>Course area <small>Pick one or more</small></h4>
+        <div class="fgrid" data-uni-courses role="group" aria-label="Course area"></div>
+      </section>
+      <section>
+        <h4>Institution type</h4>
+        <div class="fgrid" data-uni-types role="group" aria-label="Institution type"></div>
+      </section>
+      <div class="fpanel__pair">
+        <section>
+          <h4><label for="uni-city">Town or city</label></h4>
+          <select class="sort" id="uni-city" data-uni-city></select>
+        </section>
+        <section>
+          <h4 id="sort-label">Sort by</h4>
+          <div class="seg" role="group" aria-labelledby="sort-label">
+            <button type="button" data-sort="rank" aria-pressed="true">Ranked first</button>
+            <button type="button" data-sort="az" aria-pressed="false">A to Z</button>
+          </div>
+        </section>
+      </div>
+    </div>
+    <div class="fpanel__foot">
+      <button class="tback" type="button" data-filter-clear>Clear all</button>
+      <button class="btn btn--dark" type="button" data-filter-done>Show 113 institutions</button>
     </div>
   </div>
 </div>

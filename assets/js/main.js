@@ -645,32 +645,43 @@
     return Math.round(mins / 1440) + 'd ago';
   }
 
-  /* The feed carries no pictures (and publishers' photos aren't ours to
-     reuse), so each story gets an Unsplash photo of Ireland matched to what
-     it is about: a named university or city first, then its topic. */
-  var NEWS_PHOTOS = {
-    trinity: ['1651348317504-9513c52e155c', '1542375438-1a6be67f91d9'],   // Campanile, Old Library
-    cork: ['1718535236402-d433e8ecbbe1'],                                  // UCC quad
-    galway: ['1511121798969-a32ea4d37a09'],                                // the Long Walk
-    visa: ['1586441133374-ed1cb4007a47'],                                  // passport and boarding pass
-    // Topic photos never show one particular campus, so a story about one
-    // university is never pictured with another university's buildings.
-    Universities: ['1543269865-cbf427effbad', '1758612214848-04e700d192ce', '1663509851482-56ffbd1cf076'],
-    Students: ['1543269865-cbf427effbad', '1758612214848-04e700d192ce', '1663509851482-56ffbd1cf076'],
-    Careers: ['1631993753423-207208b8afa7', '1662042494231-f8bc6fd93f2b'],
-    Scholarships: ['1450101499163-c8848c66ca85', '1758612214848-04e700d192ce'],
-    Industry: ['1662042494231-f8bc6fd93f2b', '1631993753423-207208b8afa7'],
-    Visas: ['1586441133374-ed1cb4007a47', '1663509851482-56ffbd1cf076'],
-    other: ['1663509851482-56ffbd1cf076', '1713916909642-cb989be455ec', '1723814095552-29daae380d76']
+  /* Each story shows its own picture: the one its publisher attached to the
+     article (found by netlify/functions/news.mjs). A story without one, or
+     whose picture won't load here, borrows a stock photo matched to its topic.
+     These are a separate set from the rest of the page (Unsplash, free licence;
+     see assets/img/photos/CREDITS.md), and no two stories ever share one. The
+     branded tile is only a last resort, if a stock photo also fails to load. */
+  var NEWS_STOCK = {
+    Universities: ['1541829070764-84a7d30dd3f3', '1523580846011-d3a5bc25702b', '1606761568499-6d2451b23c66', '1614935151651-0bea6508db6b'],
+    Students: ['1522202176988-66273c2fd55f', '1571260899304-425eee4c7efc', '1460518451285-97b6aa326961', '1522071820081-009f0129c71c'],
+    Careers: ['1517048676732-d65bc937f952', '1573164574572-cb89e39749b4', '1572021335469-31706a17aaef'],
+    Scholarships: ['1627556704290-2b1f5853ff78', '1636231945376-3d40fdcbc462', '1514369118554-e20d93546b30'],
+    Industry: ['1581093577421-f561a654a353', '1602052577122-f73b9710adba', '1557804506-669a67965ba0'],
+    Visas: ['1454496406107-dc34337da8d6', '1654163600133-452eb7274426', '1676903865409-17eca815c554'],
+    other: ['1549918864-48ac978761a4', '1589826624017-66d3105fee65', '1554191765-016992e268ee', '1664887193400-d135058c287a']
   };
-  function newsPhoto(it, i, w) {
-    var t = String(it.title || '').toLowerCase(), list;
-    if (/trinity/.test(t)) list = NEWS_PHOTOS.trinity;
-    else if (/\bucc\b|university college cork/.test(t)) list = NEWS_PHOTOS.cork;
-    else if (/galway/.test(t)) list = NEWS_PHOTOS.galway;
-    else if (/visa|permit|stamp \d/.test(t)) list = NEWS_PHOTOS.visa;
-    else list = NEWS_PHOTOS[it.tag] || NEWS_PHOTOS.other;
-    return 'https://images.unsplash.com/photo-' + list[i % list.length] + '?auto=format&fit=crop&q=70&w=' + w;
+  var NEWS_ICONS = { Universities: 'i-cap', Students: 'i-users', Careers: 'i-briefcase', Scholarships: 'i-award', Industry: 'i-trend', Visas: 'i-passport' };
+  function stockUrl(id, w) { return 'https://images.unsplash.com/photo-' + id + '?auto=format&fit=crop&q=70&w=' + w; }
+  // Give every story without a picture its own stock photo: its topic's first,
+  // then the general set, then any left over. Already-given photos are kept.
+  function giveStock(items) {
+    var used = {};
+    items.forEach(function (x) { if (x.stock) used[x.stock] = 1; });
+    var spare = [].concat.apply([], Object.keys(NEWS_STOCK).map(function (k) { return NEWS_STOCK[k]; }));
+    items.forEach(function (x) {
+      if (x.image || x.stock || x.noStock) return;
+      var pool = (NEWS_STOCK[x.tag] || []).concat(NEWS_STOCK.other, spare);
+      for (var i = 0; i < pool.length; i++) if (!used[pool[i]]) { x.stock = pool[i]; used[pool[i]] = 1; return; }
+    });
+  }
+  function newsPicture(it, idx, cls, w) {
+    var attrs = '" alt="" decoding="async" data-news-img data-i="' + idx + '" data-w="' + w + '"';
+    if (it.image) return '<img class="' + cls + '" src="' + esc(it.image) + attrs + ' data-kind="pub" referrerpolicy="no-referrer">';
+    if (it.stock) return '<img class="' + cls + '" src="' + stockUrl(it.stock, w) + attrs + ' data-kind="stock">';
+    return newsTile(it, cls);
+  }
+  function newsTile(it, cls) {
+    return '<span class="' + cls + ' newsban__tile" aria-hidden="true">' + icon(NEWS_ICONS[it.tag] || 'i-globe') + '</span>';
   }
 
   function initNews() {
@@ -681,6 +692,7 @@
     var items = $$('[data-news-fallback] a', band).map(function (a) {
       return { title: a.textContent.trim(), link: a.href, tag: a.getAttribute('data-tag'), source: a.getAttribute('data-source'), date: '' };
     });
+    giveStock(items);
     var cur = 0, timer = null, paused = false, onScreen = false;
     var DWELL = 7000;
 
@@ -691,8 +703,9 @@
       var card = document.createElement('a');
       card.className = 'newsban__card' + (dir ? ' is-in' + (dir < 0 ? ' is-back' : '') : '');
       card.href = it.link; card.target = '_blank'; card.rel = 'noopener';
+      card.setAttribute('data-tag', it.tag || '');
       card.innerHTML =
-        '<img src="' + newsPhoto(it, cur, 1200) + '" srcset="' + newsPhoto(it, cur, 700) + ' 700w, ' + newsPhoto(it, cur, 1200) + ' 1200w, ' + newsPhoto(it, cur, 1800) + ' 1800w" sizes="(max-width: 640px) 100vw, 60vw" alt="" decoding="async">' +
+        newsPicture(it, cur, 'newsban__pic', 1600) +
         '<span class="newsban__body">' +
           '<span class="newsban__tag">' + esc(it.tag) + '</span>' +
           '<span class="newsban__title">' + esc(it.title) + '</span>' +
@@ -711,11 +724,31 @@
       var n = Math.min(4, items.length - 1), html = '';
       for (var k = 1; k <= n; k++) {
         var j = (cur + k) % items.length, x = items[j];
-        html += '<li style="--k:' + k + '"><button type="button" data-news-go="' + j + '">' +
-          '<img src="' + newsPhoto(x, j, 240) + '" alt="" decoding="async">' +
+        html += '<li style="--k:' + k + '"><button type="button" data-news-go="' + j + '" data-tag="' + esc(x.tag) + '">' +
+          newsPicture(x, j, 'newsban__thumb', 240) +
           '<span><em>' + esc(x.tag) + '</em><b>' + esc(x.title) + '</b><small>' + meta(x) + '</small></span></button></li>';
       }
       list.innerHTML = html;
+      // A publisher can refuse its picture to other sites: switch that story to
+      // a stock photo (and, if even that fails, to the branded tile).
+      $$('[data-news-img]', band).forEach(function (img) {
+        if (img.dataset.watch) return;
+        img.dataset.watch = '1';
+        img.addEventListener('error', function () {
+          var x = items[+img.getAttribute('data-i')];
+          if (!x) return;
+          if (img.getAttribute('data-kind') === 'pub') {
+            x.image = '';
+            giveStock(items);
+            if (x.stock) { img.setAttribute('data-kind', 'stock'); img.removeAttribute('referrerpolicy'); img.src = stockUrl(x.stock, +img.getAttribute('data-w')); return; }
+          } else {
+            x.stock = null; x.noStock = true;
+          }
+          var holder = document.createElement('span');
+          holder.innerHTML = newsTile(x, img.className);
+          img.replaceWith(holder.firstChild);
+        });
+      });
       restart();
     }
     function go(i, dir) { cur = (i + items.length) % items.length; paint(dir); }
@@ -768,6 +801,7 @@
         var live = data && data.items;
         if (!live || live.length < 3) return;
         items = live; cur = 0;
+        giveStock(items);
         band.classList.add('is-live');
         if (status) status.textContent = 'Live';
         paint(0);
@@ -2164,6 +2198,28 @@
   var HE_STAY = "Stay Back: 1 year after a Level 8 degree, 2 years after a Level 9 Master's";
   var HE_WORK = '20 hours a week in term, 40 in holidays';
 
+  // Course areas, read from each institution's listed subjects
+  var COURSE_AREAS = [
+    ['Business & Management', /business|management|marketing|accounting|finance|fintech|hospitality|hotel/],
+    ['Computing & Data', /comput|software|data|cyber|robotic|game design/],
+    ['Engineering & Architecture', /engineer|architect|robotic|nautical/],
+    ['Medicine & Health', /medicine|nursing|pharma|physio|health|sport science/],
+    ['Science', /(^|, )(applied )?science\b|food science|marine science|agricultur|pharmaceutical science/],
+    ['Law & Criminology', /\blaw\b|legal|barrister|criminolog/],
+    ['Arts & Humanities', /\barts?\b|humanities|philosophy|theology|liberal arts|fine art|visual culture/],
+    ['Design, Media & Music', /design|media|film|animation|music|journalism|communication|creative|composition|audio/],
+    ['Education & Teaching', /(^|, )education|teaching|education studies|music education|home economics/],
+    ['Psychology & Social Care', /psycholog|social|counselling|psychotherapy|development studies/],
+    ['English & Pathways', /english language|foundation|pathway/]
+  ];
+  function areasOf(u) {
+    if (!u.__areas) {
+      var p = String(u.programs || '').toLowerCase();
+      u.__areas = COURSE_AREAS.filter(function (a) { return a[1].test(p); }).map(function (a) { return a[0]; });
+    }
+    return u.__areas;
+  }
+
   function fold(str) { return String(str || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
   function cityOf(u) { return String(u.location || '').split(',')[0].trim(); }
 
@@ -2172,7 +2228,7 @@
     if (!grid || !window.IE_UNIVERSITIES) return;
 
     var all = window.IE_UNIVERSITIES;
-    var state = { q: '', type: 'All', city: null, sort: 'rank', view: 'grid', shown: 24 };
+    var state = { q: '', type: 'All', courses: [], city: null, sort: 'rank', view: 'grid', shown: 24 };
     var PAGE = 24;
     var selected = [];
     var compare = [];
@@ -2180,7 +2236,7 @@
     var filtered = all;
 
     var search = $('[data-uni-search]'), clearBtn = $('[data-uni-clear]');
-    var typeBox = $('[data-uni-types]'), sortSel = $('[data-uni-sort]');
+    var typeBox = $('[data-uni-types]'), courseBox = $('[data-uni-courses]'), citySel = $('[data-uni-city]');
     var countEl = $('[data-uni-count]'), moreWrap = $('[data-uni-more-wrap]'), moreBtn = $('[data-uni-more]'), moreNote = $('[data-uni-more-note]');
     var emptyBox = $('[data-uni-empty]');
     var mapCities = $('[data-map-cities]'), tip = $('[data-map-tip]'), mapBox = $('[data-map]');
@@ -2256,27 +2312,141 @@
       });
     }
 
-    function renderTypes(base) {
-      if (!typeBox) return;
-      var counts = {};
-      base.forEach(function (u) { counts[u.type] = (counts[u.type] || 0) + 1; });
-      var types = ['All'].concat(TYPE_ORDER.filter(function (t) { return counts[t] || state.type === t; }));
-      Object.keys(counts).forEach(function (t) { if (types.indexOf(t) < 0) types.push(t); });
-      var html = '';
-      if (state.city) {
-        html += '<button class="fchip fchip--city" type="button" data-clear-city aria-label="Remove city filter ' + esc(state.city) + '">' + icon('i-pin') + esc(state.city) + icon('i-x') + '</button>';
-      }
-      html += types.map(function (t) {
-        var n = t === 'All' ? base.length : (counts[t] || 0);
-        return '<button class="fchip" type="button" data-type="' + esc(t) + '" aria-pressed="' + (state.type === t) + '">' +
-          esc(t === 'All' ? 'All types' : t) + '<em>' + n + '</em></button>';
-      }).join('');
-      typeBox.innerHTML = html;
-      $$('[data-type]', typeBox).forEach(function (b) {
-        b.addEventListener('click', function () { state.type = b.getAttribute('data-type'); apply(true); });
+    function typeOk(u) { return state.type === 'All' || u.type === state.type; }
+    function courseOk(u) {
+      if (!state.courses.length) return true;
+      var a = areasOf(u);
+      return state.courses.some(function (c) { return a.indexOf(c) > -1; });
+    }
+
+    /* Each group's counts respect the other groups, so a number always says
+       how many results that choice would give. */
+    function renderFacets(base) {
+      var tCounts = {}, cCounts = {}, nType = 0;
+      base.forEach(function (u) {
+        if (courseOk(u)) { tCounts[u.type] = (tCounts[u.type] || 0) + 1; nType++; }
+        if (typeOk(u)) areasOf(u).forEach(function (a) { cCounts[a] = (cCounts[a] || 0) + 1; });
       });
-      var cc = $('[data-clear-city]', typeBox);
-      if (cc) cc.addEventListener('click', function () { setCity(null); });
+      if (typeBox) {
+        var types = ['All'].concat(TYPE_ORDER.filter(function (t) { return tCounts[t] || state.type === t; }));
+        Object.keys(tCounts).forEach(function (t) { if (types.indexOf(t) < 0) types.push(t); });
+        typeBox.innerHTML = types.map(function (t) {
+          var n = t === 'All' ? nType : (tCounts[t] || 0);
+          return '<button class="fchip" type="button" data-type="' + esc(t) + '" aria-pressed="' + (state.type === t) + '">' +
+            esc(t === 'All' ? 'All types' : t) + '<em>' + n + '</em></button>';
+        }).join('');
+      }
+      if (courseBox) {
+        courseBox.innerHTML = COURSE_AREAS.map(function (a) {
+          var name = a[0], on = state.courses.indexOf(name) > -1, n = cCounts[name] || 0;
+          return '<button class="fchip' + (n ? '' : ' is-zero') + '" type="button" data-course="' + esc(name) + '" aria-pressed="' + on + '"' + (n || on ? '' : ' disabled') + '>' +
+            (on ? icon('i-check') : '') + esc(name) + '<em>' + n + '</em></button>';
+        }).join('');
+      }
+      if (citySel) {
+        var cities = {};
+        all.forEach(function (u) { var c = cityOf(u); cities[c] = (cities[c] || 0) + 1; });
+        citySel.innerHTML = '<option value="">All towns and cities</option>' + Object.keys(cities).sort().map(function (c) {
+          return '<option value="' + esc(c) + '"' + (state.city === c ? ' selected' : '') + '>' + esc(c) + ' (' + cities[c] + ')</option>';
+        }).join('');
+      }
+      paintActive();
+    }
+
+    // What's applied, beside the Filters button; each chip removes itself
+    function paintActive() {
+      var box = $('[data-filter-active]'), badge = $('[data-filter-n]');
+      var chips = [];
+      state.courses.forEach(function (c) { chips.push(['course', c, c]); });
+      if (state.type !== 'All') chips.push(['type', state.type, state.type]);
+      if (state.city) chips.push(['city', state.city, state.city]);
+      if (box) {
+        box.innerHTML = chips.map(function (c) {
+          return '<button type="button" class="fon" data-off="' + c[0] + '" data-v="' + esc(c[1]) + '" aria-label="Remove filter ' + esc(c[2]) + '">' +
+            (c[0] === 'city' ? icon('i-pin') : '') + '<span>' + esc(c[2]) + '</span>' + icon('i-x') + '</button>';
+        }).join('') + (chips.length > 1 ? '<button type="button" class="fon fon--clear" data-off="all">Clear all</button>' : '');
+      }
+      if (badge) { badge.textContent = chips.length; badge.hidden = !chips.length; }
+    }
+
+    function filterCount() {
+      var base = baseFiltered();
+      return base.filter(function (u) { return typeOk(u) && courseOk(u); }).length;
+    }
+    function paintDone() {
+      var done = $('[data-filter-done]'), n = filterCount();
+      if (done) done.textContent = 'Show ' + n + (n === 1 ? ' institution' : ' institutions');
+    }
+
+    function clearFilters() {
+      state.type = 'All'; state.courses = []; state.city = null;
+      paintMap(); apply(true);
+    }
+
+    function initFilterPanel() {
+      var panel = $('[data-filter-panel]'), openBtn = $('[data-filter-open]'), filtersEl = $('[data-filters]');
+      if (!panel || !openBtn) return;
+      function open() {
+        filtersEl.classList.add('is-open');
+        panel.setAttribute('aria-hidden', 'false');
+        openBtn.setAttribute('aria-expanded', 'true');
+        if (window.matchMedia('(max-width: 640px)').matches) document.body.style.overflow = 'hidden';
+        paintDone();
+        setTimeout(function () { var f = $('[data-course]:not([disabled])', panel); if (f) f.focus({ preventScroll: true }); }, 60);
+      }
+      function close(focusBack) {
+        if (!filtersEl.classList.contains('is-open')) return;
+        filtersEl.classList.remove('is-open');
+        panel.setAttribute('aria-hidden', 'true');
+        openBtn.setAttribute('aria-expanded', 'false');
+        document.body.style.overflow = '';
+        if (focusBack) openBtn.focus({ preventScroll: true });
+      }
+      openBtn.addEventListener('click', function () { if (filtersEl.classList.contains('is-open')) close(); else open(); });
+      $$('[data-filter-close]', filtersEl).forEach(function (b) { b.addEventListener('click', function () { close(true); }); });
+      $('[data-filter-done]', panel).addEventListener('click', function () {
+        close(true);
+        var y = grid.getBoundingClientRect().top + window.scrollY - 170;
+        if (window.scrollY > y) window.scrollTo({ top: y, behavior: reduceMotion ? 'auto' : 'smooth' });
+      });
+      $('[data-filter-clear]', panel).addEventListener('click', function () { clearFilters(); paintDone(); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(true); });
+      // Laptop: a click anywhere outside the panel closes it
+      document.addEventListener('pointerdown', function (e) {
+        if (filtersEl.classList.contains('is-open') && !panel.contains(e.target) && !openBtn.contains(e.target) && !e.target.closest('[data-filter-active]')) close();
+      });
+
+      // Choices inside the panel apply straight away
+      panel.addEventListener('click', function (e) {
+        var t = e.target.closest('[data-type]'), c = e.target.closest('[data-course]');
+        if (t) { state.type = t.getAttribute('data-type'); apply(true); paintDone(); refocus('[data-type="' + state.type + '"]'); }
+        if (c) {
+          var name = c.getAttribute('data-course'), i = state.courses.indexOf(name);
+          if (i > -1) state.courses.splice(i, 1); else state.courses.push(name);
+          apply(true); paintDone(); refocus('[data-course="' + name + '"]');
+        }
+      });
+      // The panel re-renders its chips; keep keyboard focus on the one pressed
+      function refocus(sel) {
+        var el = $$('[data-type], [data-course]', panel).filter(function (x) {
+          return sel.indexOf('"' + (x.getAttribute('data-type') || x.getAttribute('data-course')) + '"') > -1;
+        })[0];
+        if (el) el.focus({ preventScroll: true });
+      }
+      if (citySel) citySel.addEventListener('change', paintDone);
+
+      // Active chips: remove one filter (or all) without opening the panel
+      var active = $('[data-filter-active]');
+      if (active) active.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-off]');
+        if (!b) return;
+        var kind = b.getAttribute('data-off'), v = b.getAttribute('data-v');
+        if (kind === 'all') { clearFilters(); return; }
+        if (kind === 'course') state.courses = state.courses.filter(function (x) { return x !== v; });
+        if (kind === 'type') state.type = 'All';
+        if (kind === 'city') { state.city = null; paintMap(); }
+        apply(true); paintDone();
+      });
     }
 
     function setCity(c, scroll) {
@@ -2289,8 +2459,8 @@
 
     function apply(resetPage) {
       var base = baseFiltered();
-      renderTypes(base);
-      filtered = state.type === 'All' ? base : base.filter(function (u) { return u.type === state.type; });
+      renderFacets(base);
+      filtered = base.filter(function (u) { return typeOk(u) && courseOk(u); });
       filtered = filtered.slice().sort(state.sort === 'az'
         ? function (a, b) { return a.name.localeCompare(b.name); }
         : function (a, b) { return (a.rank || 9999) - (b.rank || 9999); });
@@ -2536,7 +2706,14 @@
       window.scrollTo({ top: y, behavior: reduceMotion ? 'auto' : 'smooth' });
     });
     if (clearBtn) clearBtn.addEventListener('click', function () { search.value = ''; state.q = ''; apply(true); search.focus(); });
-    if (sortSel) sortSel.addEventListener('change', function () { state.sort = sortSel.value; apply(true); });
+    $$('[data-sort]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.sort = b.getAttribute('data-sort');
+        $$('[data-sort]').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+        apply(true);
+      });
+    });
+    if (citySel) citySel.addEventListener('change', function () { setCity(citySel.value || null); });
     $$('[data-view]').forEach(function (b) {
       b.addEventListener('click', function () {
         state.view = b.getAttribute('data-view');
@@ -2550,7 +2727,7 @@
     });
     $$('[data-uni-reset]').forEach(function (b) {
       b.addEventListener('click', function () {
-        state.q = ''; state.type = 'All'; state.city = null;
+        state.q = ''; state.type = 'All'; state.city = null; state.courses = [];
         if (search) search.value = '';
         paintMap(); apply(true);
       });
@@ -2597,6 +2774,7 @@
     $$('[data-modal-close]').forEach(function (b) { b.addEventListener('click', closeModal); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeModal(); });
 
+    initFilterPanel();
     buildMap();
     stats();
     apply(true);

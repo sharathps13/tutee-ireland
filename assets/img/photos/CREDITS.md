@@ -203,10 +203,45 @@ still used, so the footer credit line names only those two. `students-campus.jpg
 | Services: family migration | Father and daughter at an airport gate | m8TQz6FRrUk | Rochelle Lee |
 | Free counselling | Students at a table | g1Kr4Ozfoac | Brooke Cagle |
 
-The Ireland news banner reuses photos from this table (no new sources): `NEWS_PHOTOS` in
-`assets/js/main.js` picks one per story by topic, or by place when the headline names Trinity,
-UCC or Galway. The news feed itself carries no images, and publishers' photos are not reused.
+The Ireland news banner does not use any of the photos above. Each story shows the picture its
+own publisher attached to the article (from the publisher's RSS feed, or the article's `og:image`),
+hot-linked from the publisher exactly as a link preview in a messaging app would show it, and the
+banner links to that article.
 
+A story with no usable picture borrows one of the stock photos below instead (`NEWS_STOCK` in
+`assets/js/main.js`), matched to its topic, and no two stories share one. All are Unsplash, free
+licence (searched with the free-licence filter, so no Unsplash+ photos), hot-linked from
+`images.unsplash.com/photo-<id>`, and none is used anywhere else on the site.
+
+| Topic | Subject | Unsplash photo id |
+| --- | --- | --- |
+| Universities | Empty university lecture hall | 1541829070764-84a7d30dd3f3 |
+| Universities | Graduate in academic cap and gown | 1523580846011-d3a5bc25702b |
+| Universities | Students working at computers | 1606761568499-6d2451b23c66 |
+| Universities | Scientist with pipette and test tubes | 1614935151651-0bea6508db6b |
+| Students | Three students laughing at a table | 1522202176988-66273c2fd55f |
+| Students | Student carrying textbooks | 1571260899304-425eee4c7efc |
+| Students | Two people reading at a picnic table | 1460518451285-97b6aa326961 |
+| Students | Group working on a laptop | 1522071820081-009f0129c71c |
+| Careers | Team meeting round a table | 1517048676732-d65bc937f952 |
+| Careers | Colleagues with laptops at a table | 1573164574572-cb89e39749b4 |
+| Careers | Four coworkers smiling round a laptop | 1572021335469-31706a17aaef |
+| Scholarships | Graduates throwing caps in the air | 1627556704290-2b1f5853ff78 |
+| Scholarships | Graduation cap with a green tassel | 1636231945376-3d40fdcbc462 |
+| Scholarships | Student writing in a notebook | 1514369118554-e20d93546b30 |
+| Industry | Scientist at a laptop in a laboratory | 1581093577421-f561a654a353 |
+| Industry | Laboratory bench with a microscope | 1602052577122-f73b9710adba |
+| Industry | Team at a whiteboard with laptops | 1557804506-669a67965ba0 |
+| Visas | Passport on paperwork | 1454496406107-dc34337da8d6 |
+| Visas | Passport held over a map | 1654163600133-452eb7274426 |
+| Visas | Passenger jet on the tarmac | 1676903865409-17eca815c554 |
+| Any topic | Street scene heading towards a church | 1549918864-48ac978761a4 |
+| Any topic | People walking between city buildings | 1589826624017-66d3105fee65 |
+| Any topic | Bridge over a river at sunset | 1554191765-016992e268ee |
+| Any topic | River with a bridge and buildings | 1664887193400-d135058c287a |
+
+These are viewable at `https://unsplash.com/photos/` followed by the slug Unsplash shows for each.
+The table further up uses Unsplash's short ids instead:
 Each is viewable at `https://unsplash.com/photos/<id>`. To self-host instead, download each at
 roughly 2000px wide, save under this folder, swap the `src` URLs, and `images.unsplash.com` can be
 dropped from the CSP.

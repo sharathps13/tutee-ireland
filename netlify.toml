@@ -37,12 +37,14 @@
     # fonts from Google Fonts, photographs from Unsplash's CDN, country
     # flags from flagcdn.com, and email-domain checks via Cloudflare DNS-over-HTTPS. style-src keeps
     # 'unsafe-inline' for the inline style="" custom properties that drive the
-    # animation stagger and parallax.
+    # animation stagger and parallax. img-src allows any https image: the news
+    # banner shows each story's own picture from its publisher, and those hosts
+    # can't be listed in advance (images can't run code, so the risk is small).
     Content-Security-Policy = """
       default-src 'self'; \
       script-src 'self'; \
       style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
-      img-src 'self' data: https://images.unsplash.com https://flagcdn.com; \
+      img-src 'self' data: https:; \
       font-src 'self' https://fonts.gstatic.com; \
       connect-src 'self' https://*.supabase.co https://cloudflare-dns.com; \
       form-action 'self'; \

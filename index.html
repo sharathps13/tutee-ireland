@@ -271,8 +271,8 @@
 <!-- ======================= LIVE NEWS ======================= -->
 <!-- A rotating banner: one featured story with a photo, the next few beside it.
      Headlines come from /api/news (netlify/functions/news.mjs); the list below
-     is the fallback, shown until the feed answers or if it can't. Photos are
-     Irish scenes chosen by topic (see NEWS_PHOTOS in main.js). -->
+     is the fallback, shown until the feed answers or if it can't. Each story
+     shows its own article's preview picture, found by the same function. -->
 <section class="newsban" aria-labelledby="news-label" data-news>
   <div class="wrap">
     <div class="newsban__head">
