@@ -7,10 +7,11 @@
  * identical, with one addition: the lead is also written to Supabase, which is
  * now the system of record.
  *
- * Deployed at /.netlify/functions/enquiry and exposed as POST /api/enquiry by
- * the redirect in netlify.toml. Shared byte-for-byte by every country site;
- * the canonical copy lives in _tooling/serverless/ and is pushed out by
- * _tooling/install_netlify.py — edit it there, never in a country folder.
+ * Served at POST /api/enquiry: the function claims that path itself (see the `config` export
+ * at the bottom), so netlify.toml must NOT add a redirect for it — a forced
+ * redirect to /.netlify/functions/enquiry turns every enquiry into a 404.
+ * Copied from the Finland site (the reference implementation); the only
+ * difference is the fallback country below, "Ireland".
  *
  *   * No key of any kind is present in the frontend. RESEND_API_KEY and
  *     SUPABASE_SERVICE_ROLE_KEY live only in the Netlify environment, are never
@@ -30,6 +31,13 @@
  *   MAIL_FROM                   optional  From address; its domain must be
  *                                         verified in Resend or the send is rejected.
  *   SITE_COUNTRY                optional  e.g. "France"; labels the subject line.
+ *   APPS_SCRIPT_URL             optional  Google Apps Script web-app URL (…/exec). When set,
+ *                                         every lead is added to the "<Country> Leads" tab of
+ *                                         the Website Leads sheet and emailed by the script.
+ *   APPS_SCRIPT_TOKEN           optional  shared secret the script checks (LEADS_TOKEN there).
+ *
+ * With Apps Script configured, Resend only sends when the script cannot be
+ * reached, so the inbox gets one email per lead, not two.
  *
  * If the Supabase vars are absent the handler still works exactly as before —
  * email only. That keeps a country site deployable before Supabase exists.
@@ -81,7 +89,8 @@ const COUNTRY_ALIASES = {
 
 const FIELD_LIMITS = {
   name: 120, email: 200, phone: 40, destination: 600, subject: 200, from_name: 120,
-  note: 250, preferred_colleges: 1200, state: 80,
+  state: 80, course: 120, call_time: 80, shortlist: 1500, study_level: 40, intake: 60,
+  form_location: 80,
 };
 
 // Fields this handler consumes by name. Anything else the form grows later is
@@ -90,7 +99,9 @@ const FIELD_LIMITS = {
 // because this file has not been updated to know about it.
 const KNOWN_FIELDS = new Set(['name', 'email', 'phone', 'phone_number',
   'country_code', 'destination', 'from_name', 'page', 'botcheck',
-  'access_key', 'subject', 'note', 'preferred_colleges', 'state']);
+  'access_key', 'subject', 'state', 'course', 'call_time', 'shortlist',
+  'study_level', 'intake', 'form_location', 'utm_source', 'utm_medium',
+  'utm_campaign', 'utm_content']);
 const MAX_EXTRA_FIELDS = 12;
 
 /** Collapse whitespace and strip CR/LF.
@@ -164,15 +175,34 @@ export function parsePayload(raw) {
     destination: clean(data.destination, FIELD_LIMITS.destination) || 'General Inquiry',
     from_name: clean(data.from_name, FIELD_LIMITS.from_name) || 'Tutee Connect Website',
     page: clean(data.page, 200),
-    // The note keeps its line breaks: it only ever reaches the message body,
-    // never a header. Control characters other than newlines are dropped.
-    note: String(data.note ?? '').replace(/\r\n?/g, '\n').replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, '')
-      .replace(/\n{3,}/g, '\n\n').trim().slice(0, FIELD_LIMITS.note),
     state: clean(data.state, FIELD_LIMITS.state),
-    colleges: clean(data.preferred_colleges, FIELD_LIMITS.preferred_colleges),
+    course: clean(data.course, FIELD_LIMITS.course),
+    call_time: clean(data.call_time, FIELD_LIMITS.call_time),
+    shortlist: clean(data.shortlist, FIELD_LIMITS.shortlist),
+    study_level: clean(data.study_level, FIELD_LIMITS.study_level),
+    intake: clean(data.intake, FIELD_LIMITS.intake),
+    form_location: clean(data.form_location, FIELD_LIMITS.form_location),
+    utm: ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content']
+      .map((k) => clean(data[k], 100)).filter(Boolean),
     extras,
     botcheck: data.botcheck,
   };
+}
+
+/** "Master's – Data Science (Next intake)": level, course and start together,
+ * matching the sheet's single Course column. */
+export function courseLine(f) {
+  const level = /^not sure/i.test(f.study_level) ? 'Level not decided' : f.study_level;
+  const main = [level, f.course].filter(Boolean).join(' – ');
+  return main + (f.intake ? `${main ? ' ' : ''}(${f.intake})` : '');
+}
+
+/** Where the lead came from: page, then form, then any campaign tags. */
+export function leadSource(f, country) {
+  const page = country ? `${country} Landing Page` : 'Tutee Connect Website';
+  const where = f.form_location || f.from_name;
+  return [page, where].filter(Boolean).join(' – ')
+    + (f.utm.length ? ` (${f.utm.join(' / ')})` : '');
 }
 
 /** Mirror of the client-side rules. The browser check is for UX; this one is the
@@ -205,11 +235,13 @@ export function buildEmail(f, country) {
     ['Email Address', f.email],
     ['Enquiry Type / Country', f.destination],
   ];
-  if (f.state) rows.push(['State / Region', f.state]);
-  if (f.colleges) rows.push(['Preferred Colleges', f.colleges]);
-  if (f.note) rows.push(['Note from Student', f.note]);
+  if (f.state) rows.push(['State', f.state]);
+  if (f.shortlist) rows.push(['Shortlisted Universities', f.shortlist]);
+  if (courseLine(f)) rows.push(['Course', courseLine(f)]);
+  rows.push(['Lead Source', leadSource(f, country)]);
+  if (f.call_time) rows.push(['Preferred Call Time', f.call_time]);
   if (country) rows.push(['Landing Page', country]);
-  if (f.page) rows.push(['Submitted From', f.page]);
+  if (f.page) rows.push(['Submitted From', country ? `${country} Landing Page` : f.page]);
   rows.push(...f.extras);
   rows.push(['Source', f.from_name]);
 
@@ -222,7 +254,7 @@ export function buildEmail(f, country) {
     '<tr>'
     + '<td style="padding:8px 14px;border:1px solid #e5e7eb;background:#f9fafb;'
     + `font-weight:600;white-space:nowrap">${esc(label)}</td>`
-    + `<td style="padding:8px 14px;border:1px solid #e5e7eb">${esc(value).replace(/\n/g, '<br>')}</td>`
+    + `<td style="padding:8px 14px;border:1px solid #e5e7eb">${esc(value)}</td>`
     + '</tr>').join('');
 
   const html = '<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;color:#111827">'
@@ -318,6 +350,39 @@ async function storeInSupabase(f, country) {
   } catch { return null; }
 }
 
+/** Hand the lead to the Apps Script web app, which adds the sheet row and
+ * sends the formatted email. Returns { saved, mailed }, or null when the
+ * script is not configured. Apps Script answers a POST with a redirect to
+ * its output; fetch follows it, so the JSON below is the script's reply. */
+async function sendToAppsScript(f, country) {
+  const url = (process.env.APPS_SCRIPT_URL || '').trim();
+  const token = (process.env.APPS_SCRIPT_TOKEN || '').trim();
+  if (!url || !token) return null;
+
+  const res = await postJson(url, {}, {
+    token,
+    country: country || 'Ireland',
+    name: f.name,
+    phone: f.phone,
+    email: f.email,
+    state: f.state,
+    shortlist: f.shortlist,
+    course: courseLine(f),
+    lead_source: leadSource(f, country),
+    call_time: f.call_time,
+    destination: f.destination,
+    page: country ? `${country} Landing Page` : f.page,
+  }, SEND_TIMEOUT_MS);
+
+  let parsed = null;
+  try { parsed = await res.json(); } catch { /* not JSON: treated as a failure */ }
+  if (!res.ok || !parsed?.success) {
+    throw new Error(`apps script refused the lead: HTTP ${res.status} ${parsed?.message || ''}`);
+  }
+  if (parsed.mailed === false) console.error(`enquiry: apps script saved the lead but could not email it: ${parsed.mail_error || 'no detail'}`);
+  return { saved: true, mailed: parsed.mailed !== false };
+}
+
 const OK_MESSAGE = 'Profile submitted successfully! We will contact you soon.';
 
 /** Core logic, shared by the Netlify handler and the local dev server.
@@ -341,14 +406,25 @@ export async function handle(rawBody, headers = {}) {
     console.error(`enquiry: supabase insert failed: ${exc.message}`);
   }
 
-  // 2. notify the business inbox
-  let messageId = '';
-  let emailed = false;
+  // 2. the Website Leads sheet, plus its email to the business inbox
+  let sheet = null;
   try {
-    messageId = await sendViaResend(buildEmail(fields, country));
-    emailed = true;
+    sheet = await sendToAppsScript(fields, country);
+    if (sheet) stored = true;
   } catch (exc) {
-    console.error(`enquiry: send refused: ${exc.message}`);
+    console.error(`enquiry: apps script failed: ${exc.message}`);
+  }
+
+  // 3. notify the business inbox, unless the sheet script already did
+  let messageId = '';
+  let emailed = Boolean(sheet && sheet.mailed);
+  if (!emailed) {
+    try {
+      messageId = await sendViaResend(buildEmail(fields, country));
+      emailed = true;
+    } catch (exc) {
+      console.error(`enquiry: send refused: ${exc.message}`);
+    }
   }
 
   if (!stored && !emailed) {
@@ -371,7 +447,8 @@ export async function handle(rawBody, headers = {}) {
   }
 
   console.log(`enquiry: country=${country || '-'} destination=${fields.destination} `
-    + `stored=${stored ? leadId : 'no'} emailed=${emailed ? (messageId || 'yes') : 'no'}`);
+    + `stored=${stored ? (leadId ?? 'sheet') : 'no'} sheet=${sheet ? 'yes' : 'no'} `
+    + `emailed=${emailed ? (messageId || 'yes') : 'no'}`);
 
   return { status: 200, payload: { success: true, message: OK_MESSAGE } };
 }
@@ -387,6 +464,8 @@ export function health() {
     resend_configured: Boolean((process.env.RESEND_API_KEY || '').trim()),
     supabase_configured: Boolean((process.env.SUPABASE_URL || '').trim()
       && (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()),
+    sheet_configured: Boolean((process.env.APPS_SCRIPT_URL || '').trim()
+      && (process.env.APPS_SCRIPT_TOKEN || '').trim()),
     from: (process.env.MAIL_FROM || DEFAULT_FROM).trim(),
     country: resolveCountry('') || '(inferred per request)',
   };

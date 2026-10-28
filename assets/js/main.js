@@ -1239,26 +1239,36 @@
     show(0, false);
   }
 
-  /* Free counselling topic chips set what the session is about. */
-  function initTopics() {
-    $$('[data-topics]').forEach(function (group) {
-      var chips = $$('[data-topic]', group);
-      var card = group.closest('form, .form-card') || document;
-      chips.forEach(function (c) {
-        c.addEventListener('click', function () {
-          var on = c.getAttribute('aria-pressed') !== 'true';
-          chips.forEach(function (x) { x.setAttribute('aria-pressed', 'false'); });
-          c.setAttribute('aria-pressed', on ? 'true' : 'false');
-          setDestination(on ? 'Free counselling (Ireland): ' + c.getAttribute('data-topic') : 'Free counselling (Ireland)', card);
-        });
-      });
-    });
-  }
-
   /* ------------------------------------------------------------------ *
    * Lead forms → /api/enquiry
+   * The form and the chat post JSON to this site's own function, which adds
+   * the lead to the Ireland Leads sheet and emails the team (see
+   * netlify/functions/enquiry.mjs). No URL or token for that reaches the browser.
    * ------------------------------------------------------------------ */
   var ENQUIRY_ENDPOINT = '/api/enquiry';
+
+  /* A sent form stays "completed" in this browser for 30 days, so the same
+     person isn't asked to fill it in again. */
+  var LEAD_DONE_KEY = 'tc_ie_lead_done';
+  function leadDone() {
+    try {
+      var d = JSON.parse(localStorage.getItem(LEAD_DONE_KEY) || 'null');
+      return d && Date.now() - d.at < 30 * 864e5 ? d : null;
+    } catch (e) { return null; }
+  }
+
+  /* Campaign attribution: remember UTM tags from the landing URL for the visit. */
+  var UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content'];
+  var UTM = (function () {
+    var out = {};
+    try {
+      var p = new URLSearchParams(location.search), stored = JSON.parse(sessionStorage.getItem('tcUtm') || '{}');
+      UTM_KEYS.forEach(function (k) { if (p.get(k)) stored[k] = p.get(k).slice(0, 100); });
+      sessionStorage.setItem('tcUtm', JSON.stringify(stored));
+      out = stored;
+    } catch (e) { /* storage unavailable */ }
+    return out;
+  })();
   var COUNTRY_CODES = [
     ['AE', '+971'], ['AF', '+93'], ['AR', '+54'], ['AT', '+43'], ['AU', '+61'], ['BE', '+32'], ['BR', '+55'], ['CH', '+41'],
     ['CL', '+56'], ['CN', '+86'], ['CO', '+57'], ['DE', '+49'], ['DK', '+45'], ['DZ', '+213'], ['EG', '+20'], ['ES', '+34'],
@@ -1356,24 +1366,38 @@
     var nameIn = $('input[name="name"]', form), phoneIn = $('input[name="phone_number"]', form), emailIn = $('input[name="email"]', form);
     var stubName = $('[data-stub-name]', ticket), stubTopic = $('[data-stub-topic]', ticket);
     var errBox = $('[data-form-error]', form), errText = $('[data-form-error-text]', form);
-    var doneName = $('[data-done-name]', form);
+    var done = $('[data-tstep="3"]', form), doneName = $('[data-done-name]', form), doneTime = $('[data-done-time]', form);
+    var levels = $('[data-levels]', form);
     var step = 1;
 
-    /* Preferred colleges: arrive from the directory's shortlist (stored in
-       localStorage) or from the boarding-pass button, and can be removed. */
+    /* Shortlisted universities: arrive from the directory's shortlist (stored
+       in localStorage) or from the boarding-pass button, can be removed, and
+       are sent with the enquiry as "shortlist". */
     var prefsBox = $('[data-prefs]', form), prefsList = $('[data-prefs-list]', form), prefsInput = $('[data-prefs-input]', form);
     var prefs = [];
+    function savedPrefs() {
+      try {
+        var saved = JSON.parse(localStorage.getItem('tcShortlist') || '[]');
+        if (Array.isArray(saved)) return saved.filter(function (x) { return typeof x === 'string' && x.length < 200; }).slice(0, 20);
+      } catch (err) { /* nothing saved */ }
+      return [];
+    }
+    function level() {
+      var r = $('input[name="study_level"]:checked', form);
+      return r ? r.parentNode.textContent.trim() : '';
+    }
+    function paintStub() {
+      var lv = level(), n = prefs.length;
+      stubTopic.textContent = lv || (n ? n + (n === 1 ? ' university' : ' universities') + ' shortlisted' : 'Free counselling');
+      stubTopic.classList.toggle('is-empty', !lv && !n);
+    }
     function paintPrefs() {
-      prefsInput.value = prefs.join('; ');
+      prefsInput.value = prefs.join(', ');
       prefsBox.classList.toggle('hidden', !prefs.length);
       prefsList.innerHTML = prefs.map(function (n, i) {
         return '<li><span>' + esc(n) + '</span><button type="button" data-prefs-remove="' + i + '" aria-label="Remove ' + esc(n) + '">' + icon('i-x') + '</button></li>';
       }).join('');
-      var topic = $('[data-topic][aria-pressed="true"]', form);
-      if (!topic) {
-        stubTopic.textContent = prefs.length ? prefs.length + (prefs.length === 1 ? ' college' : ' colleges') + ' shortlisted' : 'Free counselling';
-        stubTopic.classList.toggle('is-empty', !prefs.length);
-      }
+      paintStub();
     }
     prefsList.addEventListener('click', function (e) {
       var b = e.target.closest('[data-prefs-remove]');
@@ -1386,10 +1410,7 @@
       if (prefs.indexOf(name) < 0) prefs.push(name);
       paintPrefs();
     };
-    try {
-      var saved = JSON.parse(localStorage.getItem('tcShortlist') || '[]');
-      if (Array.isArray(saved)) prefs = saved.filter(function (x) { return typeof x === 'string' && x.length < 200; }).slice(0, 20);
-    } catch (err) { /* nothing saved */ }
+    prefs = savedPrefs();
     // The directory opens in its own tab: pick up shortlist changes made there.
     window.addEventListener('storage', function (e) {
       if (e.key !== 'tcShortlist') return;
@@ -1399,24 +1420,11 @@
       } catch (err) { /* ignore */ }
     });
 
-    // Note: live character count
-    var note = $('[data-note]', form), noteCount = $('[data-note-count]', form);
-    // Up to 250 characters (the textarea's maxlength enforces it too).
-    var NOTE_MAX = 250;
-    function paintCount() {
-      if (!note) return;
-      if (note.value.length > NOTE_MAX) note.value = note.value.slice(0, NOTE_MAX);
-      var n = note.value.length;
-      noteCount.textContent = n + ' / ' + NOTE_MAX;
-      noteCount.classList.toggle('is-full', n >= NOTE_MAX);
-    }
-    if (note) note.addEventListener('input', paintCount);
-
     // The plane creeps towards Dublin as each detail is filled in.
     function progress() {
       var filled = [
         nameIn.value.trim().length > 1,
-        !!$('[data-topic][aria-pressed="true"]', form),
+        !!level(),
         validatePhone(($('[data-cc]', form) || {}).value || '+91', phoneIn.value).ok,
         validateEmail(emailIn.value).ok
       ].filter(Boolean).length;
@@ -1437,22 +1445,25 @@
       if (errBox) errBox.classList.add('hidden');
       progress();
     }
-    var stateSel = $('[data-state]', form);
+    function levelError(on) {
+      levels.classList.toggle('is-invalid', on);
+      var m = levels.nextElementSibling;
+      if (on && !(m && m.classList.contains('field-msg'))) {
+        m = document.createElement('p');
+        m.className = 'field-msg is-bad'; m.setAttribute('role', 'alert');
+        m.textContent = 'Choose what you’re aiming for to continue.';
+        levels.parentNode.insertBefore(m, levels.nextSibling);
+      } else if (!on && m && m.classList.contains('field-msg')) m.remove();
+    }
     function next() {
-      if (nameIn.value.trim().length < 2) {
-        errText.textContent = 'Enter your full name to continue.';
-        errBox.classList.remove('hidden');
+      if (nameIn.value.trim().replace(/[^A-Za-zÀ-ɏ]/g, '').length < 2) {
+        setFieldState(nameIn, 'bad', 'Enter your full name to continue.');
         nameIn.focus();
         return;
       }
-      if (stateSel && !stateSel.value) {
-        errText.textContent = 'Choose the state you are from to continue.';
-        errBox.classList.remove('hidden');
-        stateSel.focus();
-        return;
-      }
+      if (!level()) { levelError(true); $('input[name="study_level"]', form).focus(); return; }
       go(2);
-      setTimeout(function () { phoneIn.focus({ preventScroll: true }); }, 450);
+      setTimeout(function () { emailIn.focus({ preventScroll: true }); }, 450);
     }
 
     nameIn.addEventListener('input', function () {
@@ -1464,16 +1475,8 @@
     [phoneIn, emailIn].forEach(function (i) { i.addEventListener('input', progress); });
     var ccSel = $('[data-cc]', form);
     if (ccSel) ccSel.addEventListener('change', progress);
-    $$('[data-topic]', form).forEach(function (c) {
-      c.addEventListener('click', function () {
-        setTimeout(function () {
-          var on = $('[data-topic][aria-pressed="true"]', form);
-          var n = prefsInput.value ? prefsInput.value.split('; ').length : 0;
-          stubTopic.textContent = on ? on.getAttribute('data-topic') : (n ? n + (n === 1 ? ' college' : ' colleges') + ' shortlisted' : 'Free counselling');
-          stubTopic.classList.toggle('is-empty', !on && !n);
-          progress();
-        }, 0);
-      });
+    $$('input[name="study_level"]', form).forEach(function (r) {
+      r.addEventListener('change', function () { levelError(false); paintStub(); progress(); });
     });
     $('[data-tnext]', form).addEventListener('click', next);
     $('[data-tback]', form).addEventListener('click', function () { go(1); nameIn.focus({ preventScroll: true }); });
@@ -1481,29 +1484,43 @@
     form.addEventListener('submit', function (e) {
       if (step === 1) { e.preventDefault(); e.stopImmediatePropagation(); next(); }
     }, true);
+
+    /* "Form completed": shown after a send, and on any visit in the 30 days after. */
+    function showDone(d, focus) {
+      var first = String(d.name || '').trim().split(/\s+/)[0];
+      doneName.textContent = first ? ', ' + first : '';
+      doneTime.textContent = d.call_time && !/^any/i.test(d.call_time) ? ' in the ' + d.call_time.replace(/\s*\(.*\)/, '').toLowerCase() : '';
+      stubName.textContent = d.name || 'Your name';
+      stubName.classList.toggle('is-empty', !d.name);
+      go(3);
+      if (focus) setTimeout(function () { done.focus({ preventScroll: true }); }, 450);
+    }
     document.addEventListener('tc:submitted', function (e) {
       if (!e.detail || e.detail.form !== form) return;
-      var first = stubName.classList.contains('is-empty') ? '' : stubName.textContent.split(' ')[0];
-      doneName.textContent = first ? ', ' + first : '';
-      $$('[data-topic]', form).forEach(function (c) { c.setAttribute('aria-pressed', 'false'); });
-      prefs = []; paintPrefs(); paintCount();
+      prefs = [];
       try { localStorage.removeItem('tcShortlist'); } catch (err) { /* storage off */ }
-      go(3);
+      paintPrefs();
+      showDone(e.detail.lead, true);
     });
+    // "+ Submit another enquiry": forget the sent flag and bring back a fresh form.
     $('[data-trestart]', form).addEventListener('click', function () {
+      try { localStorage.removeItem(LEAD_DONE_KEY); } catch (err) { /* storage off */ }
+      form.reset();
       stubName.textContent = 'Your name'; stubName.classList.add('is-empty');
-      stubTopic.textContent = 'Free counselling'; stubTopic.classList.add('is-empty');
+      levelError(false);
+      prefs = savedPrefs();
       paintPrefs();
       go(1);
-      nameIn.focus();
+      nameIn.focus({ preventScroll: true });
     });
     paintPrefs();
-    go(1);
+    var earlier = leadDone();
+    if (earlier) showDone(earlier, false); else go(1);
     initLeavePrompt(form, function () { return step; }, function () {
       if (step === 1 && nameIn.value.trim().length < 2) return nameIn;
-      if (step === 1 && stateSel && !stateSel.value) return stateSel;
+      if (step === 1 && !level()) return $('input[name="study_level"]', form);
       if (step === 1) return $('[data-tnext]', form);
-      return [phoneIn, emailIn].filter(function (i) { return !i.value.trim(); })[0] || $('[data-submit-btn]', form);
+      return [emailIn, phoneIn, $('select[name="state"]', form)].filter(function (i) { return !i.value.trim(); })[0] || $('[data-submit-btn]', form);
     });
   }
 
@@ -1517,8 +1534,8 @@
     var started = false, asked = false, open = false, lastFocus = null;
     function isStarted() {
       if (getStep() === 3) return false;
-      return $$('input:not([type=hidden]):not([type=checkbox]), textarea, select[name=state]', form).some(function (el) { return el.value.trim() !== ''; })
-        || !!$('[data-topic][aria-pressed="true"]', form);
+      return $$('input:not([type=hidden]):not([type=checkbox]):not([type=radio]), select[name=state], select[name=call_time]', form).some(function (el) { return el.value.trim() !== ''; })
+        || !!$('input[name="study_level"]:checked', form);
     }
     form.addEventListener('input', function () { started = isStarted(); });
     form.addEventListener('change', function () { started = isStarted(); });
@@ -1574,8 +1591,8 @@
    * Phone: national-number length (and leading digits where they are fixed)
    * for every country code we offer, plus checks that reject keyboard-mash
    * and dummy numbers. Email: strict syntax, typo suggestions for common
-   * providers, throwaway-inbox domains, and a live check that the domain can
-   * actually receive mail (DNS MX lookup, fails open if the lookup is down).
+   * providers and throwaway-inbox domains. All checks run in the browser:
+   * nothing is looked up on another site.
    * ------------------------------------------------------------------ */
   // dial code -> [min digits, max digits, optional regex the national number must match]
   var PHONE_RULES = {
@@ -1685,29 +1702,8 @@
     return { ok: true, email: local + '@' + domain };
   }
 
-  /* Can this domain receive email? Cloudflare DNS-over-HTTPS; resolves true on any doubt. */
-  var mxCache = {};
-  function domainReceivesMail(domain) {
-    domain = domain.toLowerCase();
-    if (COMMON_DOMAINS.indexOf(domain) > -1) return Promise.resolve(true);
-    if (mxCache[domain] !== undefined) return Promise.resolve(mxCache[domain]);
-    function q(type) {
-      var ctl = window.AbortController ? new AbortController() : null;
-      var to = setTimeout(function () { if (ctl) ctl.abort(); }, 3000);
-      return fetch('https://cloudflare-dns.com/dns-query?name=' + encodeURIComponent(domain) + '&type=' + type,
-        { headers: { Accept: 'application/dns-json' }, signal: ctl ? ctl.signal : undefined })
-        .then(function (r) { clearTimeout(to); return r.json(); });
-    }
-    return q('MX').then(function (j) {
-      if (j.Status === 3) return false;                                   // domain does not exist
-      if ((j.Answer || []).some(function (a) { return a.type === 15; })) return true;
-      return q('A').then(function (a) { return (a.Answer || []).length > 0; }); // RFC 5321 fallback
-    }).catch(function () { return true; })
-      .then(function (ok) { mxCache[domain] = ok; return ok; });
-  }
-
   /* Inline field messages */
-  function fieldBox(input) { return input.closest('.phone') || input.closest('.field'); }
+  function fieldBox(input) { return input.closest('.phone') || input.closest('.duo') || input.closest('.field'); }
   function setFieldState(input, state, msg, suggest) {
     var box = fieldBox(input);
     if (!box) return;
@@ -1839,8 +1835,23 @@
 
     // Live feedback: check each field when the visitor leaves it, and clear
     // the error as soon as what they type becomes valid.
+    var checks = [];
     $$('form[data-lead-form]').forEach(function (form) {
       var cc = $('[data-cc]', form), ph = $('input[name="phone_number"]', form), em = $('input[name="email"]', form);
+      var nm = $('input[name="name"]', form), st = $('select[name="state"]', form);
+      function checkName(final) {
+        if (!nm) return true;
+        var ok = nm.value.trim().replace(/[^A-Za-zÀ-ɏ]/g, '').length >= 2;
+        if (ok) setFieldState(nm, 'ok');
+        else if (final || nm.closest('.field').classList.contains('is-invalid')) setFieldState(nm, 'bad', 'Enter your full name.');
+        return ok;
+      }
+      function checkState(final) {
+        if (!st) return true;
+        if (st.value) setFieldState(st, 'ok');
+        else if (final) setFieldState(st, 'bad', 'Choose the state you are from.');
+        return !!st.value;
+      }
       function checkPhone(final) {
         if (!ph || !cc) return true;
         if (!ph.value.trim() && !final) { setFieldState(ph, null); showHint(cc); return false; }
@@ -1856,16 +1867,25 @@
         else if (final || em.closest('.field').classList.contains('is-invalid')) setFieldState(em, 'bad', r.msg, r.suggest);
         return r.ok;
       }
+      if (nm) { nm.addEventListener('blur', function () { if (nm.value.trim()) checkName(true); }); nm.addEventListener('input', function () { checkName(false); }); }
+      if (st) st.addEventListener('change', function () { checkState(true); });
       if (ph) { ph.addEventListener('blur', function () { if (ph.value.trim()) checkPhone(true); }); ph.addEventListener('input', function () { checkPhone(false); }); }
       if (em) { em.addEventListener('blur', function () { if (em.value.trim()) checkEmail(true); }); em.addEventListener('input', function () { checkEmail(false); }); }
       if (cc) cc.addEventListener('change', function () { showHint(cc); if (ph && ph.value.trim()) checkPhone(true); });
-      form.addEventListener('reset', function () { [ph, em].forEach(function (i) { if (i) setFieldState(i, null); }); });
+      form.addEventListener('reset', function () { [nm, st, ph, em].forEach(function (i) { if (i) setFieldState(i, null); }); });
+      // Submit checks every field in page order; returns the first bad one.
+      checks.push({ form: form, firstBad: function () {
+        return [[nm, checkName], [em, checkEmail], [ph, checkPhone], [st, checkState]].filter(function (c) {
+          return c[0] && !c[1](true);
+        }).map(function (c) { return c[0]; })[0] || null;
+      } });
     });
 
     $$('form[data-lead-form]').forEach(function (form) {
       var btn = $('[data-submit-btn]', form);
       var okBox = $('[data-form-success]', form);
       var errBox = $('[data-form-error]', form);
+      var check = checks.filter(function (c) { return c.form === form; })[0];
 
       function status(state, msg) {
         if (okBox) okBox.classList.toggle('hidden', state !== 'success');
@@ -1878,35 +1898,30 @@
       form.addEventListener('submit', function (e) {
         e.preventDefault();
         status('idle');
+        if (leadDone()) return;
         var data = {};
         new FormData(form).forEach(function (v, k) { data[k] = v; });
 
-        if (String(data.name || '').trim().length < 2) { status('error', 'Enter your full name.'); return; }
-        var phIn = $('input[name="phone_number"]', form), emIn = $('input[name="email"]', form);
+        var bad = check.firstBad();
+        if (bad) {
+          var target = (bad.classList.contains('cc__native') && $('.cc__btn', bad.closest('.field'))) || bad;
+          target.focus({ preventScroll: true });
+          fieldBox(bad).scrollIntoView({ block: 'center', behavior: reduceMotion ? 'auto' : 'smooth' });
+          return;
+        }
         var pv = validatePhone(data.country_code || '+91', data.phone_number);
-        if (!pv.ok) { setFieldState(phIn, 'bad', pv.msg); status('error', pv.msg); phIn.focus(); return; }
         var ev = validateEmail(data.email);
-        if (!ev.ok) { setFieldState(emIn, 'bad', ev.msg, ev.suggest); status('error', ev.msg); emIn.focus(); return; }
 
-        if (typeof data.note === 'string') data.note = data.note.trim().slice(0, 250);
         data.phone = data.country_code + ' ' + pv.national;
         data.email = ev.email;
         delete data.country_code;
         delete data.phone_number;
         data.page = enquiryPage();
+        Object.keys(UTM).forEach(function (k) { data[k] = UTM[k]; });
 
         var label = btn ? btn.textContent : '';
-        if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
-
-        domainReceivesMail(ev.email.split('@')[1]).then(function (okDomain) {
-          if (!okDomain) {
-            var msg = "That email domain can't receive mail. Please check the spelling after the @.";
-            setFieldState(emIn, 'bad', msg); status('error', msg);
-            if (btn) { btn.disabled = false; btn.textContent = label; }
-            return null;
-          }
-          if (btn) btn.textContent = 'Submitting…';
-          return fetch(ENQUIRY_ENDPOINT, {
+        if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
+        fetch(ENQUIRY_ENDPOINT, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify(data)
@@ -1914,18 +1929,31 @@
           .then(function (r) { return r.json().catch(function () { return { success: false }; }); })
           .then(function (res) {
             if (res && res.success) {
-              status('success');
+              var d = { name: data.name, call_time: data.call_time || '', at: Date.now() };
+              try { localStorage.setItem(LEAD_DONE_KEY, JSON.stringify(d)); } catch (err) { /* storage off */ }
               form.reset();
-              document.dispatchEvent(new CustomEvent('tc:submitted', { detail: { form: form } }));
-              setTimeout(function () { status('idle'); }, 6000);
+              document.dispatchEvent(new CustomEvent('tc:submitted', { detail: { form: form, lead: d } }));
             } else {
               status('error', (res && res.message) || 'Something went wrong. Please try again.');
             }
           })
           .catch(function () { status('error', 'Network error. Check your connection and try again.'); })
           .then(function () { if (btn) { btn.disabled = false; btn.textContent = label; } });
-        });
       });
+    });
+
+    // State and call time show their chosen option as wrapping text, so a
+    // long state name is never cut off in the half-width field.
+    $$('[data-pick]').forEach(function (box) {
+      var sel = $('select', box), val = $('.pick__val', box);
+      function paint() {
+        var o = sel.options[sel.selectedIndex], t = sel.value && o ? o.textContent : '';
+        val.textContent = t;
+        box.classList.toggle('is-filled', !!t);
+      }
+      sel.addEventListener('change', paint);
+      if (sel.form) sel.form.addEventListener('reset', function () { setTimeout(paint, 0); });
+      paint();
     });
 
     // A university picked elsewhere pre-fills the enquiry.
@@ -1947,12 +1975,24 @@
    * AI counsellor chat
    * ------------------------------------------------------------------ */
   /* The chat answers from the website's own content (assets/js/chat-brain.js).
-     It never asks for names, numbers or emails: anyone who wants a person is
-     pointed to the advisor contacts already on the page. */
+     "Request a callback", "talk to a counsellor", "call me"… asks for a name,
+     phone and email, then sends them to /api/enquiry (the Ireland Leads sheet
+     and the team's inbox). Nothing is sent unless the student types those
+     details, and "cancel" stops it at any point. */
   var CHAT_WELCOME = "Hi! 👋 I'm **Tutee AI**.\n\nAsk me anything about studying in Ireland or Tutee Connect's services: visas, universities, funding, working while you study, settling in. I answer from the information on this website.";
 
+  // **bold**, *italic*, "- " bullet lists and line breaks; everything else is escaped.
   function mdToHtml(s) {
-    return esc(s).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+    function inline(t) { return esc(t).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\*([^*\s][^*]*)\*/g, '<em>$1</em>'); }
+    var out = '', ul = '';
+    String(s).split('\n').forEach(function (line) {
+      var m = line.match(/^\s*[-•]\s+(.*)$/);
+      if (m) { ul += '<li>' + inline(m[1]) + '</li>'; return; }
+      if (ul) { out += '<ul class="msg__ul">' + ul + '</ul>'; ul = ''; }
+      out += (out && !/<\/ul>$/.test(out) ? '<br>' : '') + inline(line);
+    });
+    if (ul) out += '<ul class="msg__ul">' + ul + '</ul>';
+    return out;
   }
 
   // Advisor contact routes, read from the page so they always match it.
@@ -1965,22 +2005,30 @@
     return acts;
   }
 
+  // Tap-to-ask follow-up questions suggested by the brain.
+  function suggestActions(list) {
+    return (list || []).map(function (q) { return { label: q, ask: q, suggest: true }; });
+  }
+
   function chatReply(r) {
     switch (r.type) {
-      case 'greet': return { text: 'Hello! What would you like to know about studying in Ireland or our services?' };
+      case 'greet': return { text: 'Hello! What would you like to know about studying in Ireland or our services?', actions: suggestActions(['Which universities are top ranked?', 'Best universities for IT', 'Request a callback']) };
       case 'thanks': return { text: "You're welcome! Anything else you'd like to know?" };
+      case 'bye': return { text: 'Good luck with your Ireland plans! A counsellor is a message away whenever you need one.', actions: advisorActions() };
       case 'about': return { text: "I'm **Tutee AI**, Tutee Connect's assistant. I answer questions using the information on this website. If something isn't covered here, I'll point you to one of our advisors." };
-      case 'advisor': return { text: 'Our advisors are happy to help. Reach them any of these ways:', actions: advisorActions() };
+      case 'advisor': return { text: 'Our advisors are happy to help. Ask for a callback here, or reach them any of these ways:', actions: [{ label: 'Request a callback', ask: 'Request a callback', primary: true }].concat(advisorActions().map(function (a) { a.primary = false; return a; })) };
       case 'contact': return { text: r.text, actions: advisorActions() };
       case 'unclear': return { text: 'Could you tell me a little more about what you would like to know? For example, visas, a university, scholarships or working while you study.' };
       case 'notfound': return {
         text: (r.money
           ? "This website doesn't list fees, costs or salaries, as they depend on your course and institution. "
           : "I couldn't find that on this website, and I'd rather not guess. ") +
-          'One of our advisors can answer it for you:',
-        actions: advisorActions() };
+          'One of our advisors can answer it for you:' +
+          (r.suggest && r.suggest.length ? '\n\nOr did you mean one of these?' : ''),
+        actions: advisorActions().concat(suggestActions(r.suggest)) };
       default: {
         var acts = (r.sections || []).map(function (s) { return { label: 'See ' + s.name, section: s }; });
+        acts = acts.concat(suggestActions(r.suggest));
         acts.push({ label: 'Ask an advisor', section: { id: 'contact', page: 'home' }, subtle: true });
         return { text: (r.money ? "This website doesn't list fees or costs, but here is what it says:\n\n" : '') + r.text, actions: acts };
       }
@@ -2042,6 +2090,11 @@
     var brain = window.TC_chatBrain;
     if (brain) brain.addPassages(chatExtraPassages());
 
+    // The conversation follows the visitor between the two pages for this visit.
+    var CHAT_KEY = 'tc_ie_chat', history = [];
+    try { history = JSON.parse(sessionStorage.getItem(CHAT_KEY) || '[]'); if (!Array.isArray(history)) history = []; } catch (e) { history = []; }
+    function persist() { try { sessionStorage.setItem(CHAT_KEY, JSON.stringify(history.slice(-30))); } catch (e) { /* storage off */ } }
+
     function clock() { return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
     function goTo(sec) {
       var onHome = isHome();
@@ -2054,8 +2107,10 @@
       if (onHome) { close(); setTimeout(function () { goToSection(sec.id || 'top'); }, 200); }
       else window.location.href = './index.html' + (sec.id ? '#' + sec.id : '');
     }
-    function push(role, content, before, actions) {
+    function push(role, content, before, actions, restoring) {
       var me = role === 'user';
+      // the callback flow's name, phone and email are not kept in the stored history
+      if (!before && !restoring && stage === 'idle') { history.push({ r: role, t: content, a: actions || null }); persist(); }
       var wrap = document.createElement('div');
       wrap.className = 'msg' + (me ? ' msg--me' : '');
       wrap.innerHTML = '<div class="msg__av">' + (me ? icon('i-user') : '<img src="./assets/img/logo/icon-44.png" srcset="./assets/img/logo/icon-44.png 1x, ./assets/img/logo/icon-88.png 2x, ./assets/img/logo/icon-132.png 3x" alt="">') + '</div>' +
@@ -2072,9 +2127,9 @@
           } else {
             el = document.createElement('button');
             el.type = 'button';
-            el.addEventListener('click', function () { goTo(a.section); });
+            el.addEventListener('click', function () { if (a.ask) send(a.ask); else goTo(a.section); });
           }
-          el.className = 'msg__act' + (a.primary ? ' is-primary' : '') + (a.subtle ? ' is-subtle' : '');
+          el.className = 'msg__act' + (a.primary ? ' is-primary' : '') + (a.subtle ? ' is-subtle' : '') + (a.suggest ? ' is-ask' : '');
           el.textContent = a.label;
           bar.appendChild(el);
         });
@@ -2088,6 +2143,8 @@
       if (seeded) return;
       seeded = true;
       push('assistant', CHAT_WELCOME, chipRow);
+      history.forEach(function (m) { push(m.r === 'user' ? 'user' : 'assistant', String(m.t || ''), null, m.a, true); });
+      if (history.length) chipRow.classList.add('hidden');
     }
     function open() {
       seed();
@@ -2106,9 +2163,65 @@
     function reset() {
       $$('.msg', list).forEach(function (n) { n.remove(); });
       seeded = false;
+      history = []; persist();
+      if (brain && brain.reset) brain.reset();
+      stage = 'idle'; lead = { name: '', phone: '', email: '' };
       chipRow.classList.remove('hidden');
       input.value = ''; syncSend(); setTyping(false);
       seed();
+    }
+
+    /* Lead capture (as on the Finland and New Zealand pages). */
+    var LEAD_RE = /^(request a (call ?back|callback)|evaluate my profile|talk to a counsell?or|book a (free )?(consultation|call|counselling call)|call me( back)?|i want to (talk|speak) to (a|someone|someone from your team|a counsell?or))\b|\b(talk|speak) to (a |an )?(human|person|counsell?or|advis[eo]r|someone|agent)\b|\bcall ?back\b/i;
+    var LEAD_EMAIL_RE = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[A-Za-z]{2,}$/;
+    var stage = 'idle', lead = { name: '', phone: '', email: '' };
+    function submitLead() {
+      // give up after 25 s rather than leave the visitor watching the typing dots
+      var ctl = window.AbortController ? new AbortController() : null;
+      var t = setTimeout(function () { if (ctl) ctl.abort(); }, 25000);
+      return fetch(ENQUIRY_ENDPOINT, {
+        method: 'POST',
+        signal: ctl ? ctl.signal : undefined,
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          subject: 'New Lead from Chatbot!', from_name: 'Tutee AI Counsellor',
+          name: lead.name, phone: lead.phone, email: lead.email,
+          destination: 'Chatbot General Inquiry', form_location: 'Tutee AI chat', page: enquiryPage()
+        })
+      }).then(function (r) { clearTimeout(t); return r.json().catch(function () { return { success: false }; }); },
+        function (err) { clearTimeout(t); throw err; });
+    }
+    // The reply while the details flow is running (text or a promise of it), otherwise null.
+    function leadStep(q) {
+      if (stage !== 'idle' && /^(cancel|stop|no thanks|never ?mind|skip)\b/i.test(q)) { stage = 'idle'; return "No problem, I've stopped. What else would you like to know?"; }
+      if (stage !== 'idle' && /\?$/.test(q)) stage = 'idle';             // a question mid-flow: answer it instead
+      if (stage === 'name') {
+        if (q.replace(/[^A-Za-zÀ-ɏ]/g, '').length < 2) return 'Could you type your **full name**? (Or type *cancel*.)';
+        lead.name = q.slice(0, 120); stage = 'phone';
+        return 'Thanks ' + q.split(/\s+/)[0] + "! What's the best **phone number** to reach you on? Please include the country code, e.g. +91 98765 43210.";
+      }
+      if (stage === 'phone') {
+        var d = q.replace(/\D/g, '');
+        if (/[a-z]/i.test(q) || d.length < 7 || d.length > 15) return "That doesn't look like a valid phone number. Please enter it with the country code, e.g. +91 98765 43210, or type *cancel*.";
+        lead.phone = q.slice(0, 40); stage = 'email';
+        return "Got it. Lastly, what's your **email address**?";
+      }
+      if (stage === 'email') {
+        if (!LEAD_EMAIL_RE.test(q)) return "That doesn't look like a valid email address. Could you check it, or type *cancel*?";
+        lead.email = q.slice(0, 200); stage = 'idle';
+        return submitLead().then(function (res) {
+          return res && res.success
+            ? '✅ **Done!** A counsellor will contact you within one working day.\n\nAnything else I can help with in the meantime?'
+            : { text: "Sorry, that didn't go through. Please use the free counselling form or reach us directly:", actions: advisorActions() };
+        }, function () {
+          return { text: 'Network error while sending. Please use the free counselling form or reach us directly:', actions: advisorActions() };
+        });
+      }
+      if (LEAD_RE.test(q)) {
+        stage = 'name'; lead = { name: '', phone: '', email: '' };
+        return "Happy to set that up. A counsellor reviews your profile personally and replies within **one working day**.\n\nWhat's your **full name**? (Type *cancel* any time to stop.)";
+      }
+      return null;
     }
 
     function send(text) {
@@ -2119,6 +2232,17 @@
       chipRow.classList.add('hidden');
       busy = true; setTyping(true);
       var started = Date.now();
+      var step = leadStep(text);
+      if (step !== null) {
+        Promise.resolve(step).then(function (out) {
+          if (typeof out === 'string') out = { text: out };
+          setTimeout(function () {
+            setTyping(false); busy = false;
+            push('assistant', out.text, null, out.actions);
+          }, Math.max(0, 450 - (Date.now() - started)));
+        });
+        return;
+      }
       var reply = brain ? brain.answer(text) : Promise.resolve({ type: 'notfound' });
       reply.catch(function () { return { type: 'notfound' }; }).then(function (r) {
         var out = chatReply(r);
@@ -2236,6 +2360,13 @@
     var filtered = all;
 
     var search = $('[data-uni-search]'), clearBtn = $('[data-uni-clear]');
+    // The full placeholder does not fit a small phone's search box: use the short one there.
+    if (search && search.getAttribute('data-placeholder-short')) {
+      var fullPh = search.placeholder, narrowMq = window.matchMedia('(max-width: 400px)');
+      var setPh = function () { search.placeholder = narrowMq.matches ? search.getAttribute('data-placeholder-short') : fullPh; };
+      setPh();
+      if (narrowMq.addEventListener) narrowMq.addEventListener('change', setPh);
+    }
     var typeBox = $('[data-uni-types]'), courseBox = $('[data-uni-courses]'), citySel = $('[data-uni-city]');
     var countEl = $('[data-uni-count]'), moreWrap = $('[data-uni-more-wrap]'), moreBtn = $('[data-uni-more]'), moreNote = $('[data-uni-more-note]');
     var emptyBox = $('[data-uni-empty]');
@@ -2550,7 +2681,8 @@
       cmpBar.classList.toggle('is-on', n > 0);
       document.body.classList.toggle('has-cmp', n > 0);
       cmpBar.innerHTML = '<div class="cmpbar__slots">' + compare.map(function (c) {
-        return '<span>' + esc(c) + '<button type="button" data-cmp-drop="' + esc(c) + '" aria-label="Remove ' + esc(c) + ' from compare">' + icon('i-x') + '</button></span>';
+        // the chip shows the short name ("Trinity College Dublin"); the full one is in the label
+        return '<span title="' + esc(c) + '">' + esc(c.split(/,| - /)[0]) + '<button type="button" data-cmp-drop="' + esc(c) + '" aria-label="Remove ' + esc(c) + ' from compare">' + icon('i-x') + '</button></span>';
       }).join('') + (n < CMP_MAX ? '<span class="is-empty">' + (n === 1 ? 'Pick one more to compare' : 'Add a third (optional)') + '</span>' : '') + '</div>' +
         '<button class="btn" type="button" data-cmp-open' + (n < 2 ? ' disabled' : '') + '>Compare' + (n > 1 ? ' ' + n : '') + '</button>';
       $$('[data-cmp-drop]', cmpBar).forEach(function (b) { b.addEventListener('click', function () { toggleCompare(b.getAttribute('data-cmp-drop')); }); });
@@ -2804,7 +2936,6 @@
   initFaq();
   applyOrigin();
   initForms();
-  initTopics();
   initCheckin();
   initChat();
   initDockPin();

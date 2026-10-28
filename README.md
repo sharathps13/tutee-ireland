@@ -22,7 +22,7 @@ Bricolage Grotesque (Google Fonts); body copy uses the self-hosted Quicksand.
 | Settle | Four-stop route that draws on scroll. Tapping a stop flies a pin along the line and opens its details: what it is, key facts, how we help. |
 | Stories | Two counter-scrolling rows of testimonials that pause on hover. |
 | FAQ | Pick a question on the left and its answer card swaps in on the right, with previous/next buttons. The Tutee AI chat lives behind its button in the quick-contact dock. |
-| Free counselling | A two-step boarding-pass check-in: the stub previews the passenger name and topic live, a plane flies from the visitor's country to DUB as fields are filled, and a "Checked in" stamp lands on success. |
+| Free counselling | A two-step boarding-pass check-in: step 1 takes the name, study level, intake and any shortlisted universities; step 2 the email, phone (with country code), state and call time, and subject. The stub previews the passenger name and level live, a plane flies from the visitor's country to DUB as fields are filled, and a "Checked in" stamp lands on success. Email, phone, name and state are checked as the visitor types or leaves a field. After sending, a "Form completed" panel replaces the form for 30 days in that browser (localStorage `tc_ie_lead_done`), with "+ Submit another enquiry" to start again. |
 
 A quick-contact dock sits on both pages: Ask Tutee AI (bottom-left), Reserve a call (scrolls to Free
 counselling) and WhatsApp (+91 73583 64959) bottom-right. On phones the three share one slim bar fixed
@@ -67,7 +67,9 @@ assets/img/logo/                logo.webp (transparent, original colours);
                                 at any size: see .header__logo / .wordmark in site.css.
 assets/img/                     loan-partner logos, CC-BY photos + CREDITS.md
 assets/js/chat-brain.js         what Tutee AI knows and how it answers (see "The Tutee AI chat" below)
-netlify/functions/enquiry.mjs   emails enquiries; both forms post to /api/enquiry (the chat collects nothing)
+netlify/functions/enquiry.mjs   POST /api/enquiry: the form and the chat's callback request post here; it forwards
+                                each lead to the shared Apps Script (Ireland Leads tab + email), Resend only as fallback
+apps-script/                    reference copy of that shared Apps Script and its setup notes (README.md)
 ```
 
 The two pages share the header, footer, chat and icon sprite by copy. If you change one, change the
@@ -81,7 +83,9 @@ remain same-origin only.
 
 ## The Tutee AI chat
 
-The chat answers **only from this website's content** and never asks for names, numbers or emails.
+The chat answers **only from this website's content**. The one exception is a callback request: "Request a
+callback", "talk to a counsellor", "call me" and similar ask for a name, phone and email ("cancel" stops it),
+then send them to `/api/enquiry` like the form, as a "Tutee AI chat" lead.
 `assets/js/chat-brain.js` builds its knowledge when the chat is first opened, from:
 
 - every section of both pages (read live from the DOM; the other page is fetched once), so edits to
@@ -96,6 +100,13 @@ questions get the page's phone, WhatsApp, email, website and offices. When the s
 question (or a question uses words the site never mentions), the reply says so and offers the advisor
 contacts instead of guessing. Answered replies carry a button to the matching section and a light
 "Ask an advisor" link.
+
+On top of that, as on the Finland and New Zealand pages, it fixes typos ("scholarhsip", "trinty"),
+answers "which university is best for IT / business / nursing…" from the directory's subjects (QS-ranked
+first, optionally in one town), compares institutions ("TCD vs UCD"), and follows the thread: "is it
+ranked?", "where is it?" and "what about Cork?" lean on the previous answer. Replies offer tap-to-ask
+follow-up questions (dashed chips), and the conversation follows the visitor between the two pages for
+the visit (sessionStorage `tc_ie_chat`; the callback's name, phone and email are not stored there).
 
 To teach it something new, put it on the page (or in a FAQ item); to tune matching, edit the
 synonym groups and aliases at the top of `chat-brain.js`.
@@ -194,6 +205,6 @@ broken while automating a browser, check `document.visibilityState` before belie
 
 ### Deploying
 
-There's no build step. Upload the folder as-is to Netlify, Vercel, Cloudflare Pages, S3 or any
-static host — `index.html` at the root. `serve.py`, `Start Local Server.command` and `README.md`
+There's no build step. Deploy the folder as-is to Netlify — `index.html` at the root. Leads need the
+Netlify function and its environment variables; see `apps-script/README.md`. `serve.py`, `Start Local Server.command` and `README.md`
 are development-only and can be left out of the upload.

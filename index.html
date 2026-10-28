@@ -673,10 +673,11 @@
 
     <div class="ticket" data-ticket data-reveal="scale">
       <form class="ticket__main" data-lead-form data-checkin novalidate>
-        <input name="subject" type="hidden" value="New Free Counselling request from the Tutee Connect Ireland page">
+        <input name="subject" type="hidden" value="New Lead from Tutee Connect Landing Page!">
         <input name="from_name" type="hidden" value="Tutee Connect Notification System">
-        <input name="botcheck" type="checkbox" class="hidden" tabindex="-1" autocomplete="off">
+        <input name="form_location" type="hidden" value="Free counselling form">
         <input data-destination-input name="destination" type="hidden" value="Free counselling (Ireland)">
+        <input name="botcheck" type="checkbox" class="hidden" tabindex="-1" autocomplete="off" aria-hidden="true">
         <div class="ticket__bar"><span><img src="./assets/img/logo/icon-44.png" srcset="./assets/img/logo/icon-44.png 1x, ./assets/img/logo/icon-88.png 2x, ./assets/img/logo/icon-132.png 3x" alt="" width="44" height="44">Tutee Connect, free counselling</span><span><svg><use href="#i-plane"/></svg>Boarding pass</span></div>
         <div class="ticket__tri" aria-hidden="true"></div>
         <div class="ticket__body">
@@ -694,46 +695,57 @@
           <div class="ticket__stage">
             <fieldset class="tstep is-active" data-tstep="1">
               <legend>Who's flying?</legend>
-              <div class="field"><input id="f-name" name="name" type="text" placeholder=" " autocomplete="name" required><label for="f-name">Your full name</label><svg><use href="#i-user"/></svg></div>
-              <div class="field field--select"><select id="f-state" name="state" required data-state><option value="" selected disabled hidden></option><optgroup label="India"><option>Andhra Pradesh</option><option>Arunachal Pradesh</option><option>Assam</option><option>Bihar</option><option>Chhattisgarh</option><option>Goa</option><option>Gujarat</option><option>Haryana</option><option>Himachal Pradesh</option><option>Jharkhand</option><option>Karnataka</option><option>Kerala</option><option>Madhya Pradesh</option><option>Maharashtra</option><option>Manipur</option><option>Meghalaya</option><option>Mizoram</option><option>Nagaland</option><option>Odisha</option><option>Punjab</option><option>Rajasthan</option><option>Sikkim</option><option>Tamil Nadu</option><option>Telangana</option><option>Tripura</option><option>Uttar Pradesh</option><option>Uttarakhand</option><option>West Bengal</option><option>Andaman and Nicobar Islands</option><option>Chandigarh</option><option>Dadra and Nagar Haveli and Daman and Diu</option><option>Delhi</option><option>Jammu and Kashmir</option><option>Ladakh</option><option>Lakshadweep</option><option>Puducherry</option></optgroup><optgroup label="Outside India"><option>United Arab Emirates</option><option>Other country</option></optgroup></select><label for="f-state">Which state are you from?</label><svg><use href="#i-pin"/></svg></div>
-              <span class="topics-label" id="topics-label">What's your trip about?</span>
-              <div class="topics" role="group" aria-labelledby="topics-label" data-topics>
-                <button class="topic" type="button" aria-pressed="false" data-topic="Admissions"><svg><use href="#i-cap"/></svg>Admissions</button>
-                <button class="topic" type="button" aria-pressed="false" data-topic="Student visa"><svg><use href="#i-passport"/></svg>Student visa</button>
-                <button class="topic" type="button" aria-pressed="false" data-topic="Scholarships and loans"><svg><use href="#i-award"/></svg>Scholarships and loans</button>
-                <button class="topic" type="button" aria-pressed="false" data-topic="Work and settlement"><svg><use href="#i-briefcase"/></svg>Work and settlement</button>
+              <div class="field"><input id="f-name" name="name" type="text" placeholder=" " autocomplete="name" maxlength="120" required><label for="f-name">Your full name</label><svg><use href="#i-user"/></svg></div>
+              <span class="topics-label" id="level-label">What are you aiming for?</span>
+              <div class="topics topics--pick" role="radiogroup" aria-labelledby="level-label" data-levels>
+                <label class="topic"><input type="radio" name="study_level" value="Bachelor's"><svg><use href="#i-book"/></svg>Bachelor's</label>
+                <label class="topic"><input type="radio" name="study_level" value="Master's"><svg><use href="#i-cap"/></svg>Master's</label>
+                <label class="topic"><input type="radio" name="study_level" value="Doctoral"><svg><use href="#i-flask"/></svg>Doctoral / PhD</label>
+                <label class="topic"><input type="radio" name="study_level" value="Not sure"><svg><use href="#i-compass"/></svg>Not sure yet</label>
+              </div>
+              <span class="topics-label" id="intake-label">When would you like to start?</span>
+              <div class="topics topics--pick" role="radiogroup" aria-labelledby="intake-label">
+                <label class="topic"><input type="radio" name="intake" value="Next intake" checked>Next available intake</label>
+                <label class="topic"><input type="radio" name="intake" value="Within 12 months">Within 12 months</label>
+                <label class="topic"><input type="radio" name="intake" value="Later">Later / exploring</label>
               </div>
               <div class="prefs hidden" data-prefs>
-                <span class="topics-label">Your preferred colleges</span>
+                <span class="topics-label">Your shortlisted universities</span>
                 <ul class="prefs__list" data-prefs-list></ul>
-                <a class="prefs__edit" href="./universities.html" target="_blank" rel="noopener">Add or change colleges</a>
+                <a class="prefs__edit" href="./universities.html" target="_blank" rel="noopener">+ Add or change universities</a>
               </div>
-              <input type="hidden" name="preferred_colleges" value="" data-prefs-input>
+              <input type="hidden" name="shortlist" value="" data-prefs-input>
               <div class="tstep__row"><button class="btn btn--dark" type="button" data-tnext>Continue to contact details <svg><use href="#i-arrow"/></svg></button></div>
             </fieldset>
             <fieldset class="tstep" data-tstep="2">
               <legend>Where can we reach you?</legend>
+              <div class="field"><input id="f-email" name="email" type="email" inputmode="email" placeholder=" " autocomplete="email" maxlength="200" required><label for="f-email">Email address</label><svg><use href="#i-mail"/></svg></div>
               <div class="phone">
                 <div class="field"><select name="country_code" aria-label="Country code" data-cc></select></div>
-                <div class="field"><input id="f-phone" name="phone_number" type="tel" placeholder=" " autocomplete="tel-national" required><label for="f-phone">Phone number</label><svg><use href="#i-phone"/></svg></div>
+                <div class="field"><input id="f-phone" name="phone_number" type="tel" inputmode="tel" placeholder=" " autocomplete="tel-national" maxlength="20" required><label for="f-phone">Phone number</label><svg><use href="#i-phone"/></svg></div>
               </div>
-              <div class="field"><input id="f-email" name="email" type="email" placeholder=" " autocomplete="email" required><label for="f-email">Email address</label><svg><use href="#i-mail"/></svg></div>
-              <div class="note">
-                <label class="topics-label" for="f-note">Add a note <span>(optional)</span></label>
-                <textarea id="f-note" name="note" rows="3" maxlength="250" data-note placeholder="e.g. CGPA 8.4/10, IELTS 7.0, BTech in CSE, aiming for a Master's in Data Science, September intake, preferred colleges…"></textarea>
-                <span class="note__count" data-note-count>0 / 250</span>
+              <div class="duo">
+                <div class="field field--select" data-pick><select id="f-state" name="state" required><option value="" selected disabled hidden></option><optgroup label="India"><option>Andhra Pradesh</option><option>Arunachal Pradesh</option><option>Assam</option><option>Bihar</option><option>Chhattisgarh</option><option>Goa</option><option>Gujarat</option><option>Haryana</option><option>Himachal Pradesh</option><option>Jharkhand</option><option>Karnataka</option><option>Kerala</option><option>Madhya Pradesh</option><option>Maharashtra</option><option>Manipur</option><option>Meghalaya</option><option>Mizoram</option><option>Nagaland</option><option>Odisha</option><option>Punjab</option><option>Rajasthan</option><option>Sikkim</option><option>Tamil Nadu</option><option>Telangana</option><option>Tripura</option><option>Uttar Pradesh</option><option>Uttarakhand</option><option>West Bengal</option><option>Andaman and Nicobar Islands</option><option>Chandigarh</option><option>Dadra and Nagar Haveli and Daman and Diu</option><option>Delhi</option><option>Jammu and Kashmir</option><option>Ladakh</option><option>Lakshadweep</option><option>Puducherry</option></optgroup><optgroup label="Outside India"><option>United Arab Emirates</option><option>Other country</option></optgroup></select><span class="pick__val" aria-hidden="true"></span><label for="f-state">Your state</label><svg><use href="#i-pin"/></svg></div>
+                <div class="field field--select" data-pick><select id="f-time" name="call_time"><option value="" selected disabled hidden></option><option>Morning (9 am &ndash; 12 pm)</option><option>Afternoon (12 &ndash; 4 pm)</option><option>Evening (4 &ndash; 8 pm)</option><option>Anytime</option></select><span class="pick__val" aria-hidden="true"></span><label for="f-time">Call time</label><svg><use href="#i-clock"/></svg></div>
               </div>
+              <div class="field"><input id="f-course" name="course" type="text" placeholder=" " autocomplete="off" maxlength="120"><label for="f-course">Subject (e.g. Data Science)</label><svg><use href="#i-book"/></svg></div>
               <div class="tstep__row">
                 <button class="tback" type="button" data-tback><svg><use href="#i-chev-l"/></svg>Back</button>
                 <button class="btn" type="submit" data-submit-btn>Board now: book my free session</button>
               </div>
               <p class="form-note">We only use your details to contact you about studying in Ireland.</p>
             </fieldset>
-            <div class="tstep tstep--done" data-tstep="3" role="status">
+            <div class="tstep tstep--done" data-tstep="3" role="status" tabindex="-1">
               <div class="tdone__tick"><svg><use href="#i-check"/></svg></div>
-              <h3>You're checked in<span data-done-name></span>!</h3>
-              <p>A Tutee Connect counsellor will call you soon to plan your route to Ireland.</p>
-              <button class="tback" type="button" data-trestart>Book another session</button>
+              <span class="tdone__kick">Form completed</span>
+              <h3>Thank you<span data-done-name></span>!</h3>
+              <p>Your boarding pass is with our team. A Tutee Connect counsellor will call you<span data-done-time></span> within one working day to plan your route to Ireland.</p>
+              <ul class="tdone__next">
+                <li><svg><use href="#i-phone"/></svg>Keep your phone handy for our call</li>
+                <li><svg><use href="#i-mail"/></svg>Check your inbox for a follow-up email</li>
+              </ul>
+              <a class="btn btn--dark tdone__wa" href="https://wa.me/917358364959" target="_blank" rel="noopener noreferrer"><svg><use href="#i-whatsapp"/></svg>Chat with us on WhatsApp</a>
+              <button class="tdone__again" type="button" data-trestart>+ Submit another enquiry</button>
             </div>
           </div>
         </div>
@@ -842,6 +854,7 @@
   <div class="chat__book">Free counselling available<button type="button" data-chat-contact>Book now</button></div>
   <div class="chat__msgs" data-chat-msgs aria-live="polite">
     <div class="chips" data-chat-chips>
+      <button type="button">Request a callback</button>
       <button type="button">How do I get an Irish Student Visa?</button>
       <button type="button">Which universities are top ranked?</button>
       <button type="button">Can I work while I study?</button>

@@ -16,14 +16,10 @@
 [build.environment]
   NODE_VERSION = "20"
 
-# The pages post to /api/enquiry (same origin). The function also declares this
-# path itself via `export const config`, so this redirect is belt-and-braces:
-# it keeps the endpoint working on older Netlify function runtimes too.
-[[redirects]]
-  from = "/api/enquiry"
-  to = "/.netlify/functions/enquiry"
-  status = 200
-  force = true
+# The pages post to /api/enquiry (same origin). The function claims that path
+# itself via `export const config`. No redirect here: a function with its own
+# path is no longer served at /.netlify/functions/enquiry, so a forced redirect
+# to that address turns every enquiry into a 404.
 
 # Deep links such as /universities.html are real files, so no SPA catch-all is
 # wanted here — a bad URL should 404 rather than silently render the home page.
@@ -35,7 +31,8 @@
     # Scripts are all same-origin, so script-src stays strict with no
     # 'unsafe-inline'. Third-party assets: the Bricolage Grotesque and Caveat
     # fonts from Google Fonts, photographs from Unsplash's CDN, country
-    # flags from flagcdn.com, and email-domain checks via Cloudflare DNS-over-HTTPS. style-src keeps
+    # flags from flagcdn.com. Nothing but this site and Supabase is fetched
+    # from script (connect-src). style-src keeps
     # 'unsafe-inline' for the inline style="" custom properties that drive the
     # animation stagger and parallax. img-src allows any https image: the news
     # banner shows each story's own picture from its publisher, and those hosts
@@ -46,7 +43,7 @@
       style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
       img-src 'self' data: https:; \
       font-src 'self' https://fonts.gstatic.com; \
-      connect-src 'self' https://*.supabase.co https://cloudflare-dns.com; \
+      connect-src 'self' https://*.supabase.co; \
       form-action 'self'; \
       base-uri 'self'; \
       object-src 'none'; \

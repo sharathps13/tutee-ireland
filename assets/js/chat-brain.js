@@ -12,8 +12,17 @@
    for the institutions. If nothing on the site answers it, the reply says so
    and points to an advisor instead of guessing.
 
-   It never asks for or stores personal details.
-   Exposes window.TC_chatBrain = { answer(question) -> Promise<reply>, addPassages(list) }.
+   On top of that search it understands, like the Finland and New Zealand
+   chats: typos ("scholarhsip", "trinty"), institution short names,
+   comparisons ("TCD vs UCD"), "which university is best for IT / business /
+   nursing" (from the directory's subjects, ranked ones first), and follow-ups
+   that lean on the last answer ("is it ranked?", "what about Cork?").
+   Replies carry tap-to-ask suggestions for the next question.
+
+   This file only answers questions and stores nothing. The callback request
+   ("Request a callback", "talk to a counsellor"…) lives in main.js: it asks
+   for a name, phone and email and sends them to /api/enquiry.
+   Exposes window.TC_chatBrain = { answer(question) -> Promise<reply>, addPassages(list), reset() }.
    ========================================================================== */
 (function () {
   'use strict';
@@ -50,6 +59,7 @@
   function tokens(s) {
     return words(s).filter(function (w) { return !STOPSET[w]; }).map(stem);
   }
+  function fold(s) { return words(s).join(' '); }
 
   // How students ask vs how the site words it. Each group is mutual: any word
   // in a query also searches for the others, at a lower weight.
@@ -98,7 +108,7 @@
   /* ------------------------------------------------------------------ *
    * Passages
    * ------------------------------------------------------------------ */
-  var passages = [], built = false, buildP = null, contact = {}, cities = [], types = [];
+  var passages = [], built = false, buildP = null, contact = {}, cities = [], types = [], unis = [];
 
   function clean(s) { return String(s || '').replace(/\s+/g, ' ').replace(/\s+([.,;:!?])/g, '$1').replace(/\.\./g, '.').trim(); }
 
@@ -258,6 +268,10 @@
           l.slice(0, 14).map(function (u) { return u.name; }).join('; ') + (l.length > 14 ? '; and ' + (l.length - 14) + ' more' : '') + '.',
         sec: { id: 'directory', name: 'Universities directory', page: 'universities' } });
     });
+    unis = list.map(function (u) {
+      var core = fold(u.name.split(/,| - | \(/)[0]);
+      return { u: u, core: core, city: u.location.split(',')[0] };
+    });
     var ranked = list.filter(function (u) { return u.ranked; }).sort(function (a, b) { return a.rank - b.rank; });
     add({ title: 'Top ranked universities in Ireland, best universities, QS ranking', kind: 'list',
       text: 'The ' + ranked.length + ' Irish institutions in the QS World University Rankings: Europe 2026, in order: ' +
@@ -327,7 +341,8 @@
       var best = 0, exact = false;
       qt.forms.forEach(function (f) {
         var tf = p.tf[f.t];
-        if (!tf) return;
+        // an institution's name is not a synonym ("International House" is not accommodation)
+        if (!tf || (p.kind === 'uni' && f.w !== 1)) return;
         var v = f.w * idf(f.t) * (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * len / avgLen));
         if (v > best) { best = v; exact = f.w === 1; }
       });
@@ -379,6 +394,7 @@
   var MONEY = /\b(how much|cost|costs|fee|fees|tuition|price|prices|expensive|cheap|budget|salary|salaries|wage|wages|pay|euro|euros|rupees?|lakhs?|inr)\b|[€£$₹]/i;
   var SMALLTALK = [
     [/^\s*(hi|hello|hey|hiya|good (morning|afternoon|evening)|namaste)\b[\s!.]*$/i, 'greet'],
+    [/^\s*(bye|goodbye|see you|that'?s all|that is all)\b[\s!.]*$/i, 'bye'],
     [/^\s*(thanks|thank you|thx|cheers|great|awesome|perfect|ok|okay|cool)\b[\s!.]*$/i, 'thanks'],
     [/\b(who are you|what are you|what can you do|are you (a )?(bot|human|ai|real))\b/i, 'about'],
     [/\b(human|real person|talk to (an? )?(advisor|adviser|counsellor|counselor|agent|someone|person)|call me|book (a )?(call|session|counselling|counseling|appointment)|speak to)\b/i, 'advisor']
@@ -398,6 +414,194 @@
     return { type: 'contact', text: text };
   }
 
+  /* ------------------------------------------------------------------ *
+   * Understanding the question: typos, institutions, subjects, follow-ups
+   * ------------------------------------------------------------------ */
+  // Edit distance where swapping two neighbouring letters ("studnet") counts as
+  // one edit, giving up once it passes max.
+  function lev(a, b, max) {
+    if (Math.abs(a.length - b.length) > max) return max + 1;
+    var pp = [], prev = [], cur, i, j;
+    for (j = 0; j <= b.length; j++) prev[j] = j;
+    for (i = 1; i <= a.length; i++) {
+      cur = [i]; var low = i;
+      for (j = 1; j <= b.length; j++) {
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) cur[j] = Math.min(cur[j], pp[j - 2] + 1);
+        if (cur[j] < low) low = cur[j];
+      }
+      if (low > max) return max + 1;
+      pp = prev; prev = cur;
+    }
+    return prev[b.length];
+  }
+
+  // An unknown word becomes the closest word the site uses ("scholarhsip",
+  // "accomodation", "trinty"), when it is close enough to be a typo.
+  var vocab = null;
+  function fixTypos(q) {
+    if (!vocab) {
+      var extra = {};
+      Object.keys(ALIASES).concat(Object.keys(ALIASES).map(function (k) { return ALIASES[k]; })).join(' ').split(' ')
+        .concat(cities.join(' ').split(' ')).forEach(function (w) { if (w) extra[w] = 1; });
+      Object.keys(SYN).forEach(function (w) { extra[w] = 1; });
+      vocab = { list: Object.keys(df).concat(Object.keys(extra)).filter(function (w) { return w.length >= 4 && !/^\d/.test(w); }), known: extra };
+    }
+    return q.replace(/[A-Za-z]{4,}/g, function (w) {
+      var lw = w.toLowerCase();
+      if (STOPSET[lw] || df[stem(lw)] || vocab.known[lw] || SYN[stem(lw)]) return w;
+      var max = lw.length >= 8 ? 2 : 1, best = null, bestD = max + 1, bestDf = -1;
+      vocab.list.forEach(function (v) {
+        if (Math.abs(v.length - lw.length) > max || v[0] !== lw[0] && v[1] !== lw[1]) return;
+        var d = lev(lw, v, max);
+        if (d < bestD || (d === bestD && (df[v] || 0) > bestDf)) { best = v; bestD = d; bestDf = df[v] || 0; }
+      });
+      return best && bestD <= max ? best : w;
+    });
+  }
+
+  // Institutions named in the question: full names and the short names people type.
+  // A town name alone ("Limerick") means the town, not its university.
+  function unisIn(lq) {
+    var f = ' ' + fold(lq) + ' ', hits = [];
+    unis.forEach(function (x) {
+      if (x.core.length >= 8 && f.indexOf(' ' + x.core + ' ') > -1) hits.push({ x: x, at: f.indexOf(' ' + x.core + ' '), len: x.core.length });
+    });
+    Object.keys(ALIASES).forEach(function (k) {
+      ALIASES[k].split(' ').forEach(function (a) {
+        if (cities.indexOf(a) > -1 || f.indexOf(' ' + a + ' ') < 0) return;
+        unis.forEach(function (x) { if (fold(x.u.name).indexOf(k) > -1) hits.push({ x: x, at: f.indexOf(' ' + a + ' '), len: a.length }); });
+      });
+    });
+    // "university college dublin" also contains other names: keep the longest at each spot
+    hits.sort(function (a, b) { return a.at - b.at || b.len - a.len; });
+    var out = [], end = -1;
+    hits.forEach(function (h) {
+      if (h.at < end || out.indexOf(h.x) > -1) return;
+      out.push(h.x); end = h.at + h.len + 1;
+    });
+    return out;
+  }
+  function cityIn(lq) {
+    return cities.filter(function (c) { return new RegExp('\\b' + c + '\\b').test(lq); })
+      .sort(function (a, b) { return b.length - a.length; })[0] || '';
+  }
+
+  // Subjects as students say them, and how the directory lists them.
+  var SUBJECTS = [
+    // "IT" only counts in capitals (see subjectIn), so "is it ranked?" is not about computing
+    ['computing', 'Computing and IT', /\b(cs|ict|computers?|computing|comp sci|software|coding|programming|data|analytics|ai|artificial intelligence|machine learning|cyber ?security|cyber|tech|technology|fintech)\b/, /comput|software|data|cyber|fintech|robotics|game design/i],
+    ['business', 'Business and management', /\b(business|mba|bba|management|marketing|commerce|finance|accounting|accountancy|economics|entrepreneurship)\b/, /business|management|marketing|accounting|finance|fintech/i],
+    ['engineering', 'Engineering', /\b(engineering|engineer|mechanical|civil|electrical|electronics?|robotics)\b/, /engineering|robotics/i],
+    ['medicine', 'Medicine and health', /\b(medicine|medical|mbbs|doctor|surgery|health|healthcare|public health|physio|physiotherapy)\b/, /medicine|health|physio/i],
+    ['nursing', 'Nursing', /\b(nursing|nurse|midwifery)\b/, /nursing/i],
+    ['pharmacy', 'Pharmacy', /\b(pharmacy|pharmaceutical|pharma)\b/, /pharma/i],
+    ['law', 'Law', /\b(law|legal|llb|llm|barrister|criminology)\b/, /law|legal|criminology/i],
+    ['design', 'Art, design and media', /\b(design|art|arts|animation|film|media|music|creative|architecture|journalism|photography|games?)\b/, /design|art|animation|film|media|music|architecture|journalism|creative/i],
+    ['psychology', 'Psychology', /\b(psychology|counselling|psychotherapy)\b/, /psycholog|counselling|psychotherapy/i],
+    ['education', 'Education and teaching', /\b(education|teaching|teacher)\b/, /education|teaching/i],
+    ['hospitality', 'Hospitality and tourism', /\b(hospitality|hotel|tourism|culinary|chef)\b/, /hospitality|hotel/i],
+    ['agriculture', 'Agriculture and food science', /\b(agriculture|agri|farming|food science|food|marine)\b/, /agricult|food|marine/i],
+    ['english', 'English language courses', /\b(english (course|courses|language|classes)|language school|learn english)\b/, /english language/i]
+  ];
+  var TYPE_RANK = { 'University': 0, 'Technological University': 1, 'Specialist': 2, 'Institute of Technology': 3, 'College': 4, 'Language School': 5 };
+  function subjectIn(lq, raw) {
+    if (/\bIT\b/.test(raw) || /\bi\.t\.?(\s|$)/.test(lq)) return SUBJECTS[0];
+    for (var i = 0; i < SUBJECTS.length; i++) if (SUBJECTS[i][2].test(lq)) return SUBJECTS[i];
+    return null;
+  }
+  function count(x) { return parseInt(String(x.u.programmes).replace(/,/g, ''), 10) || 0; }
+  function shortName(x) { return x.u.name.split(/,| - /)[0]; }
+
+  function uniProfile(x, facet) {
+    var u = x.u, n = shortName(x);
+    var rank = u.ranked ? 'ranked **#' + u.rank + ' in Ireland** in the QS World University Rankings: Europe 2026' : 'not in the QS Europe 2026 ranking (only 12 Irish institutions are)';
+    var text;
+    if (facet === 'rank') text = '**' + n + '** is ' + rank + '.';
+    else if (facet === 'where') text = '**' + n + '** is in **' + u.location + '**.';
+    else if (facet === 'subjects') text = '**' + n + '** has **' + u.programmes + '** programmes on Ireland\'s official registers for international students. It is known for ' + u.programs + '.';
+    else text = '**' + u.name + '**\n- ' + u.type + ' in ' + u.location + '\n- ' + u.programmes + ' eligible programmes for international students\n- Known for: ' + u.programs + '\n- ' + rank.charAt(0).toUpperCase() + rank.slice(1);
+    var other = unis.filter(function (y) { return y !== x && y.u.ranked; })[0];
+    return { type: 'answer', text: text, sections: [{ id: 'directory', name: 'Universities directory', page: 'universities' }],
+      suggest: [facet === 'rank' ? 'What is ' + n + ' known for?' : 'Is ' + n + ' ranked?', 'Compare ' + n + ' and ' + shortName(other)] };
+  }
+
+  function compare(list) {
+    list = list.slice(0, 3);
+    return { type: 'answer', sections: [{ id: 'directory', name: 'Universities directory', page: 'universities' }],
+      text: '**' + list.map(shortName).join(' vs ') + '**\n' + list.map(function (x) {
+        var u = x.u;
+        return '- **' + shortName(x) + ':** ' + u.type.toLowerCase() + ' in ' + x.city + ', ' + u.programmes + ' programmes, ' +
+          (u.ranked ? 'QS Europe #' + u.rank + ' in Ireland' : 'not QS ranked') + '. Known for ' + u.programs + '.';
+      }).join('\n') + '\nThe right one depends on your course, marks and budget. A counsellor can weigh them up with you for free.',
+      suggest: ['Request a callback'] };
+  }
+
+  function subjectAnswer(s, city) {
+    var pool = unis.filter(function (x) { return s[3].test(x.u.programs) && (!city || x.city.toLowerCase() === city) && (s[0] === 'english' || x.u.type !== 'Language School'); });
+    var where = city ? ' in ' + city.charAt(0).toUpperCase() + city.slice(1) : ' in Ireland';
+    if (!pool.length) return { type: 'answer', text: 'Our directory has no institution' + where + ' listed for ' + s[1] + '. Try another city, or ask a counsellor: many institutions teach more than the subjects they are best known for.',
+      sections: [{ id: 'directory', name: 'Universities directory', page: 'universities' }], suggest: [s[1] + ' in Dublin', 'Request a callback'] };
+    pool.sort(function (a, b) {
+      return (a.u.ranked ? a.u.rank : 99) - (b.u.ranked ? b.u.rank : 99) || TYPE_RANK[a.u.type] - TYPE_RANK[b.u.type] || count(b) - count(a);
+    });
+    var top = pool.slice(0, 8);
+    return { type: 'answer', sections: [{ id: 'directory', name: 'Universities directory', page: 'universities' }],
+      text: (pool.length === 1 ? 'One institution' : pool.length + ' institutions') + where + (pool.length === 1 ? ' is' : ' are') + ' known for **' + s[1] + '**' + (pool.length > 8 ? '. The strongest, ranked first:' : ':') + '\n' +
+        top.map(function (x) { return '- **' + shortName(x) + '** (' + x.city + (x.u.ranked ? ', QS #' + x.u.rank + ' in Ireland' : '') + ')'; }).join('\n') +
+        '\nThe best fit depends on your marks, budget and goals, which a counsellor maps out on the free call.',
+      suggest: ['Tell me about ' + shortName(top[0])].concat(top[1] ? ['Compare ' + shortName(top[0]) + ' and ' + shortName(top[1])] : []).concat(city ? [] : [s[1] + ' in Cork']) };
+  }
+
+  var FACETS = [
+    ['rank', /\b(rank|ranked|ranking|rankings|qs|position)\b/],
+    ['where', /\b(where|location|located|which city|what city|address)\b/],
+    ['subjects', /\b(known for|famous for|good for|subjects?|courses?|programmes?|programs?|offer|teach|study there)\b/]
+  ];
+  function facetIn(lq) { for (var i = 0; i < FACETS.length; i++) if (FACETS[i][1].test(lq)) return FACETS[i][0]; return ''; }
+
+  // What the conversation is about, so "is it ranked?" and "what about Cork?" make sense.
+  var ctx = { uni: null, subject: null, city: '', facet: '' };
+  var PRONOUN = /\b(it|its|it's|this (one|university|college|uni|place)|that (one|university|college|uni)|there|they|them)\b/;
+  var FOLLOW = /^\s*(and|what about|how about|same for|what of)\b/i;
+
+  // Structured answers from the directory data; null when the question is not that kind.
+  function directAnswer(lq, raw) {
+    var named = unisIn(lq), city = cityIn(lq), subj = subjectIn(lq, raw), facet = facetIn(lq);
+    var follow = FOLLOW.test(lq) && lq.split(/\s+/).length <= 6;
+    var offTopic = /\b(visa|permit|stamp|loan|scholarships?|work|job|jobs|stay back|pr|ielts|pte|toefl|accommodation|rent|insurance|fees?|cost)\b/.test(lq);
+
+    if (named.length >= 2 || (named.length === 1 && /\b(compare|vs|versus|or|difference)\b/.test(lq) && ctx.uni && ctx.uni !== named[0])) {
+      var list = named.length >= 2 ? named : [ctx.uni, named[0]];
+      ctx = { uni: null, subject: null, city: '', facet: '' };
+      return compare(list);
+    }
+    if (named.length === 1 && !offTopic) {
+      ctx = { uni: named[0], subject: null, city: '', facet: facet };
+      return uniProfile(named[0], facet);
+    }
+    // "is it ranked?", "where is it?", "and UCD?" carry on from the last institution
+    if (!named.length && ctx.uni && !offTopic && (facet || follow) && (PRONOUN.test(lq) || follow) && !city && !subj) {
+      ctx.facet = facet || ctx.facet;
+      return uniProfile(ctx.uni, ctx.facet);
+    }
+    var listy = /\b(best|top|good|which|what|where|recommend|suggest|list|any|universit|college|institut|unis?|study|course|courses|programmes?|degree|masters?|bachelors?)\b/.test(lq);
+    if (subj && !offTopic && (listy || follow)) {
+      ctx = { uni: null, subject: subj, city: city, facet: '' };
+      return subjectAnswer(subj, city);
+    }
+    // "what about Cork?" after a subject list: the same subject in that town
+    if (follow && city && ctx.subject) {
+      ctx.city = city;
+      return subjectAnswer(ctx.subject, city);
+    }
+    if (follow && city) {
+      var cl = passages.filter(function (p) { return p.city === city; })[0];
+      if (cl) { ctx = { uni: null, subject: null, city: city, facet: '' }; return { type: 'answer', text: cl.text, sections: [cl.sec] }; }
+    }
+    return null;
+  }
+
   function answer(question) {
     var q = String(question || '').trim();
     for (var i = 0; i < SMALLTALK.length; i++) {
@@ -405,16 +609,19 @@
     }
     if (CONTACT_Q.test(q)) return build().then(contactAnswer);
     return build().then(function () {
+      q = fixTypos(q);
+      var lq = q.toLowerCase();
+      var direct = directAnswer(lq, q);
+      if (direct) return direct;
       // Questions about institutions in a named town get that town's list;
       // "how many" or "all universities" without a town get the directory count.
-      var lq = q.toLowerCase();
       var aboutInst = /\b(universit|college|institut|unis?\b|schools?\b|providers?\b|study options)/i.test(q);
       if (aboutInst) {
-        var city = cities.filter(function (c) { return new RegExp('\\b' + c + '\\b').test(lq); })[0];
+        var city = cityIn(lq);
         var listy = /\b(how many|which|what|list|any|all|in)\b/.test(lq);
         if (city && listy) {
           var cl = passages.filter(function (p) { return p.city === city; })[0];
-          if (cl) return { type: 'answer', text: cl.text, sections: [cl.sec] };
+          if (cl) { ctx = { uni: null, subject: null, city: city, facet: '' }; return { type: 'answer', text: cl.text, sections: [cl.sec], suggest: ['Computing and IT in ' + city.charAt(0).toUpperCase() + city.slice(1)] }; }
         }
         // "language schools", "technological universities": that type's list
         var type = !city && types.filter(function (x) { return x !== 'university' && x !== 'college' && lq.indexOf(x.replace(/y$/, '')) > -1; })[0];
@@ -434,6 +641,14 @@
         .filter(function (r) { return r.s > 0; })
         .sort(function (a, b) { return b.s - a.s; });
       var top = ranked[0];
+      // FAQ questions near the top make good "you could also ask" suggestions.
+      function asks(from, skip) {
+        var seen = {};
+        return ranked.slice(0, 10).filter(function (r) {
+          if (r.p.kind !== 'faq' || r.s < from || r.cover < 0.5 || skip.indexOf(r) > -1 || seen[r.p.title]) return false;
+          seen[r.p.title] = 1; return /\?$/.test(r.p.title);
+        }).slice(0, 2).map(function (r) { return r.p.title; });
+      }
       // How much of the question an answer must cover. Short questions must be
       // matched almost fully; a word the site never uses at all ("deadline",
       // "12th") means the site probably does not cover the question.
@@ -442,7 +657,7 @@
       if (unknown) needCover = Math.max(needCover, 0.75);
       var money = MONEY.test(q);
       if (!top || top.s < 2.2 || top.cover < needCover) {
-        return { type: 'notfound', money: money };
+        return { type: 'notfound', money: money, suggest: top ? asks(top.s * 0.5, []) : [] };
       }
       // A second passage when it is nearly as relevant and adds something new.
       var picks = [top];
@@ -461,13 +676,18 @@
       picks.forEach(function (r) {
         if (r.p.sec && !secs.some(function (s) { return s.id === r.p.sec.id && s.page === r.p.sec.page; })) secs.push(r.p.sec);
       });
-      return { type: 'answer', text: parts.join('\n\n'), sections: secs, money: money };
+      // an institution answered from the page becomes the subject of follow-ups
+      var uniHit = picks[0].p.kind === 'uni' && unisIn(picks[0].p.title.toLowerCase())[0];
+      ctx = { uni: uniHit || null, subject: null, city: '', facet: '' };
+      return { type: 'answer', text: parts.join('\n\n'), sections: secs, money: money, suggest: asks(top.s * 0.35, picks) };
     });
   }
 
   window.TC_chatBrain = {
     answer: answer,
     warm: function () { return build(); },
+    // forget what the conversation was about (the chat's "new chat" button)
+    reset: function () { ctx = { uni: null, subject: null, city: '', facet: '' }; },
     // main.js hands over content that lives in its own data (the settlement stops)
     addPassages: function (list) {
       list.forEach(add);
