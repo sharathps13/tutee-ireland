@@ -127,7 +127,7 @@ p { margin: 0 0 1em; }
 .header.is-hidden { transform: translateY(-140%); }
 .header__bar {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  padding: 8px 8px 8px 18px; border-radius: 999px;
+  padding: 6px 8px 6px 14px; border-radius: 999px;
   background: rgba(255, 255, 255, 0.86);
   -webkit-backdrop-filter: blur(14px) saturate(1.4); backdrop-filter: blur(14px) saturate(1.4);
   box-shadow: 0 1px 0 rgba(255,255,255,.6) inset, 0 12px 32px -16px rgba(8, 40, 34, 0.45);
@@ -135,17 +135,10 @@ p { margin: 0 0 1em; }
   transition: box-shadow .35s, background-color .35s;
 }
 .header.is-scrolled .header__bar { background: rgba(255,255,255,0.95); box-shadow: 0 12px 32px -14px rgba(8, 40, 34, 0.35); }
-/* Header logo: the symbol is an image; the wordmark is live text in Alegreya
-   (the logo's own typeface) and the logo's exact colours, so it stays sharp at
-   any size instead of shrinking a picture of text to a few pixels. */
-.header__logo { display: inline-flex; align-items: center; gap: 2px; text-decoration: none; }
-.header__mark { width: 44px; height: 44px; flex: none; }
-.wordmark { display: inline-grid; font-family: 'Alegreya', Georgia, serif; font-weight: 700; line-height: 1; }
-.wordmark__name { font-size: 21px; letter-spacing: -0.005em; white-space: nowrap; }
-.wordmark__name b, .wordmark__name i { font-weight: 700; font-style: normal; }
-.wordmark__name b { color: #054041; }
-.wordmark__name i { color: #8c0304; }
-.wordmark__tag { justify-self: end; margin-top: 2px; font-size: 9.5px; letter-spacing: .045em; color: #8c0304; white-space: nowrap; }
+/* Header logo: the official artwork, unaltered, pre-sized 1x-4x from the master. */
+.header__logo { display: inline-flex; align-items: center; text-decoration: none; }
+.header__brand { height: 64px; width: auto; display: block; }
+@media (max-width: 640px) { .header__brand { height: 50px; } }
 .nav { display: flex; gap: 4px; align-items: center; }
 .nav a, .nav button {
   position: relative; padding: 10px 16px; border: 0; background: none; border-radius: 999px;
@@ -1077,8 +1070,9 @@ p { margin: 0 0 1em; }
 .footer__grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 36px; }
 /* logo-dark-*.webp: the dark-background version of the logo (cream between and
    around the rings, lighter teal and brighter red lettering), pre-sized 1x/2x/3x. */
-.footer__logo { display: inline-block; margin-bottom: 18px; }
-.footer__logo img { height: 76px; width: auto; }
+/* The official logo is drawn for light backgrounds, so it sits on a white plate. */
+.footer__logo { display: inline-block; margin-bottom: 18px; padding: 12px 18px; background: #fff; border-radius: 14px; }
+.footer__logo img { height: 64px; width: auto; display: block; }
 /* On dark green the icon's teal and claret rings need a fine light keyline to read. */
 /* On dark green the chat launcher and chat header use icon-dark-*.png (cream between the rings). */
 .footer__contact { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 8px; font-size: .92rem; }
