@@ -514,6 +514,21 @@
         return '<span>' + esc(x.trim()) + '</span>';
       }).join('');
       pass.style.setProperty('--pc', COLORS[(+row.getAttribute('data-rank') - 1) % 3]);
+      paintPick(row);
+    }
+
+    // Shortlist the university on the pass without leaving the board
+    var passPick = $('[data-pass-pick]', pass);
+    function paintPick(row) {
+      if (!passPick) return;
+      var on = shortlist.has(row.getAttribute('data-name'));
+      if (passPick.getAttribute('aria-pressed') === String(on)) return;
+      passPick.setAttribute('aria-pressed', on);
+      passPick.innerHTML = '<i>' + icon(on ? 'i-check' : 'i-plus') + '</i>' + (on ? 'Shortlisted' : 'Add to my shortlist');
+    }
+    if (passPick) {
+      passPick.addEventListener('click', function () { shortlist.toggle(rows[current].getAttribute('data-name')); });
+      shortlist.onChange(function () { paintPick(rows[current]); });
     }
 
     var phone = window.matchMedia('(max-width: 640px)');
@@ -1353,6 +1368,110 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * The university shortlist: one list of names in localStorage, shared by
+   * the directory's cards and tray, the boarding pass on the home page, the
+   * check-in form's chips and the floating shortlist button. Every change
+   * goes through here so they all stay in step; other tabs follow through
+   * the storage event. Listeners get (list, namesJustAdded).
+   * ------------------------------------------------------------------ */
+  var shortlist = (function () {
+    var KEY = 'tcShortlist', MAX = 20, fns = [];
+    function clean(list) {
+      return Array.isArray(list) ? list.filter(function (x) { return typeof x === 'string' && x && x.length < 200; }).slice(0, MAX) : [];
+    }
+    function load() {
+      try { return clean(JSON.parse(localStorage.getItem(KEY) || '[]')); } catch (e) { return []; }
+    }
+    var list = load();
+    function emit(before) {
+      var added = list.filter(function (n) { return before.indexOf(n) < 0; });
+      var gone = before.filter(function (n) { return list.indexOf(n) < 0; });
+      if (!added.length && !gone.length) return;
+      fns.forEach(function (fn) { fn(list.slice(), added); });
+    }
+    function save(next) {
+      var before = list;
+      list = clean(next);
+      try { if (list.length) localStorage.setItem(KEY, JSON.stringify(list)); else localStorage.removeItem(KEY); } catch (e) { /* storage off: this page still works */ }
+      emit(before);
+    }
+    window.addEventListener('storage', function (e) {
+      if (e.key !== KEY && e.key !== null) return;
+      var before = list;
+      list = load();
+      emit(before);
+    });
+    return {
+      all: function () { return list.slice(); },
+      has: function (n) { return list.indexOf(n) > -1; },
+      add: function (n) { if (list.indexOf(n) < 0) save(list.concat([n])); },
+      remove: function (n) { save(list.filter(function (x) { return x !== n; })); },
+      toggle: function (n) { if (list.indexOf(n) > -1) this.remove(n); else this.add(n); },
+      clear: function () { save([]); },
+      onChange: function (fn) { fns.push(fn); }
+    };
+  })();
+
+  function shortName(n) { return String(n).split(/,| - /)[0]; }   // "Trinity College Dublin"
+  // Restart one of the notice animations (clearing any earlier one, whose rule would otherwise win)
+  function replay(el, cls) { el.classList.remove('is-enter', 'is-bump', 'is-flip', 'is-settle'); void el.offsetWidth; el.classList.add(cls); }
+
+  /* The floating shortlist (home page) and the directory's tray announce
+     changes the same way: a pop, a flipping count and a ripple on every add,
+     the label reading "Added: <name>" for a moment, a small settle on a
+     removal, and a soft glow every ~10s until the visitor first clicks it.
+     Returns the function to call with (list, namesJustAdded). */
+  var SL_SEEN = 'tc_ie_sl_seen';
+  function shortlistNotice(box, countEl, paintLabel, entrance) {
+    var last = -1, timer = null, seen = false;
+    try { seen = sessionStorage.getItem(SL_SEEN) === '1'; } catch (e) { /* storage off */ }
+    box.addEventListener('click', function () {
+      seen = true; box.classList.remove('is-idle');
+      try { sessionStorage.setItem(SL_SEEN, '1'); } catch (e) { /* storage off */ }
+    });
+    return function (list, added) {
+      var n = list.length, name = added && added.length ? added[added.length - 1] : '';
+      var appearing = n > 0 && last <= 0;
+      countEl.textContent = n;
+      box.classList.toggle('is-idle', n > 0 && !seen && !reduceMotion);
+      clearTimeout(timer);
+      // Reduced motion keeps the words: the label still says what was added.
+      paintLabel(n, name);
+      if (name) timer = setTimeout(function () { paintLabel(n, ''); }, 2500);
+      if (!reduceMotion) {
+        if (appearing && entrance) replay(box, 'is-enter');
+        else if (name && last > 0) { replay(box, 'is-bump'); replay(countEl, 'is-flip'); }
+        else if (n && n < last) replay(countEl, 'is-settle');
+      }
+      last = n;
+    };
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Floating shortlist button (home page): the visitor's shortlist, one tap
+   * from the boarding pass. Rests out of the way while the form is on screen.
+   * ------------------------------------------------------------------ */
+  function initShortlistFab() {
+    var fab = $('[data-slfab]');
+    if (!fab) return;
+    var label = $('[data-slfab-label]', fab);
+    var cue = shortlistNotice(fab, $('[data-slfab-count]', fab), function (n, added) {
+      label.textContent = added ? 'Added: ' + shortName(added) : n + ' shortlisted';
+    }, true);
+    function sync(list, added) {
+      fab.hidden = !list.length;
+      fab.setAttribute('aria-label', list.length + (list.length === 1 ? ' university' : ' universities') + ' shortlisted. Review and check in');
+      cue(list, added);
+    }
+    var form = $('#contact');
+    if (form && 'IntersectionObserver' in window) {
+      new IntersectionObserver(function (es) { fab.classList.toggle('is-away', es[0].isIntersecting); }, { threshold: 0.15 }).observe(form);
+    }
+    shortlist.onChange(sync);
+    sync(shortlist.all(), []);
+  }
+
+  /* ------------------------------------------------------------------ *
    * Free counselling: a two-step boarding-pass check-in with a live stub
    * ------------------------------------------------------------------ */
   var addPreferredCollege = null;   // set by initCheckin, used by the boarding pass button
@@ -1370,18 +1489,12 @@
     var levels = $('[data-levels]', form);
     var step = 1;
 
-    /* Shortlisted universities: arrive from the directory's shortlist (stored
-       in localStorage) or from the boarding-pass button, can be removed, and
-       are sent with the enquiry as "shortlist". */
+    /* Shortlisted universities: the shared shortlist (directory cards, the
+       boarding pass on the board, another tab) shown as chips. × takes one
+       off the shortlist everywhere; the hidden "shortlist" field always
+       holds exactly what the chips show. */
     var prefsBox = $('[data-prefs]', form), prefsList = $('[data-prefs-list]', form), prefsInput = $('[data-prefs-input]', form);
-    var prefs = [];
-    function savedPrefs() {
-      try {
-        var saved = JSON.parse(localStorage.getItem('tcShortlist') || '[]');
-        if (Array.isArray(saved)) return saved.filter(function (x) { return typeof x === 'string' && x.length < 200; }).slice(0, 20);
-      } catch (err) { /* nothing saved */ }
-      return [];
-    }
+    var prefs = shortlist.all();
     function level() {
       var r = $('input[name="study_level"]:checked', form);
       return r ? r.parentNode.textContent.trim() : '';
@@ -1393,32 +1506,25 @@
     }
     function paintPrefs() {
       prefsInput.value = prefs.join(', ');
-      prefsBox.classList.toggle('hidden', !prefs.length);
-      prefsList.innerHTML = prefs.map(function (n, i) {
-        return '<li><span>' + esc(n) + '</span><button type="button" data-prefs-remove="' + i + '" aria-label="Remove ' + esc(n) + '">' + icon('i-x') + '</button></li>';
+      prefsBox.classList.toggle('is-empty', !prefs.length);
+      prefsList.hidden = !prefs.length;
+      prefsList.innerHTML = prefs.map(function (n) {
+        return '<li><span>' + esc(n) + '</span><button type="button" data-prefs-remove="' + esc(n) + '" aria-label="Remove ' + esc(n) + ' from your shortlist">' + icon('i-x') + '</button></li>';
       }).join('');
       paintStub();
     }
     prefsList.addEventListener('click', function (e) {
       var b = e.target.closest('[data-prefs-remove]');
       if (!b) return;
-      prefs.splice(+b.getAttribute('data-prefs-remove'), 1);
-      try { localStorage.setItem('tcShortlist', JSON.stringify(prefs)); } catch (err) { /* storage off */ }
-      paintPrefs();
+      var at = $$('[data-prefs-remove]', prefsList).indexOf(b);
+      shortlist.remove(b.getAttribute('data-prefs-remove'));
+      // Keep keyboard focus here: the next chip's ×, or the add link once none are left.
+      var left = $$('[data-prefs-remove]', prefsList);
+      (left[Math.min(at, left.length - 1)] || $('.prefs__edit', prefsBox)).focus({ preventScroll: true });
     });
-    addPreferredCollege = function (name) {
-      if (prefs.indexOf(name) < 0) prefs.push(name);
-      paintPrefs();
-    };
-    prefs = savedPrefs();
-    // The directory opens in its own tab: pick up shortlist changes made there.
-    window.addEventListener('storage', function (e) {
-      if (e.key !== 'tcShortlist') return;
-      try {
-        var list = JSON.parse(e.newValue || '[]');
-        if (Array.isArray(list)) { prefs = list.filter(function (x) { return typeof x === 'string' && x.length < 200; }).slice(0, 20); paintPrefs(); }
-      } catch (err) { /* ignore */ }
-    });
+    addPreferredCollege = function (name) { shortlist.add(name); };
+    // The directory opens in its own tab; changes there arrive through the shared shortlist.
+    shortlist.onChange(function (list) { prefs = list; paintPrefs(); });
 
     // The plane creeps towards Dublin as each detail is filled in.
     function progress() {
@@ -1440,6 +1546,7 @@
       pills.forEach(function (li, i) {
         li.classList.toggle('is-on', i + 1 === n);
         li.classList.toggle('is-done', i + 1 < n);
+        if (i + 1 === n) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current');
       });
       ticket.classList.toggle('is-booked', n === 3);
       if (errBox) errBox.classList.add('hidden');
@@ -1455,6 +1562,13 @@
         levels.parentNode.insertBefore(m, levels.nextSibling);
       } else if (!on && m && m.classList.contains('field-msg')) m.remove();
     }
+    // A new step: bring the pass's top back into view if it has scrolled off
+    // (step 1 is the longer one on phones), then focus the step's heading.
+    function enterStep(n) {
+      var top = form.getBoundingClientRect().top;
+      if (top < 0 || top > window.innerHeight * 0.6) form.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+      setTimeout(function () { $('[data-tstep="' + n + '"] legend', form).focus({ preventScroll: true }); }, 450);
+    }
     function next() {
       if (nameIn.value.trim().replace(/[^A-Za-zÀ-ɏ]/g, '').length < 2) {
         setFieldState(nameIn, 'bad', 'Enter your full name to continue.');
@@ -1463,7 +1577,7 @@
       }
       if (!level()) { levelError(true); $('input[name="study_level"]', form).focus(); return; }
       go(2);
-      setTimeout(function () { emailIn.focus({ preventScroll: true }); }, 450);
+      enterStep(2);
     }
 
     nameIn.addEventListener('input', function () {
@@ -1479,7 +1593,7 @@
       r.addEventListener('change', function () { levelError(false); paintStub(); progress(); });
     });
     $('[data-tnext]', form).addEventListener('click', next);
-    $('[data-tback]', form).addEventListener('click', function () { go(1); nameIn.focus({ preventScroll: true }); });
+    $('[data-tback]', form).addEventListener('click', function () { go(1); enterStep(1); });
     // Enter on step 1 moves on instead of submitting half a form.
     form.addEventListener('submit', function (e) {
       if (step === 1) { e.preventDefault(); e.stopImmediatePropagation(); next(); }
@@ -1497,9 +1611,7 @@
     }
     document.addEventListener('tc:submitted', function (e) {
       if (!e.detail || e.detail.form !== form) return;
-      prefs = [];
-      try { localStorage.removeItem('tcShortlist'); } catch (err) { /* storage off */ }
-      paintPrefs();
+      shortlist.clear();   // sent with this enquiry; the chips and floating button empty too
       showDone(e.detail.lead, true);
     });
     // "+ Submit another enquiry": forget the sent flag and bring back a fresh form.
@@ -1508,7 +1620,7 @@
       form.reset();
       stubName.textContent = 'Your name'; stubName.classList.add('is-empty');
       levelError(false);
-      prefs = savedPrefs();
+      prefs = shortlist.all();
       paintPrefs();
       go(1);
       nameIn.focus({ preventScroll: true });
@@ -2354,7 +2466,7 @@
     var all = window.IE_UNIVERSITIES;
     var state = { q: '', type: 'All', courses: [], city: null, sort: 'rank', view: 'grid', shown: 24 };
     var PAGE = 24;
-    var selected = [];
+    var selected = shortlist.all();   // mirrors the shared shortlist, so a return visit keeps it
     var compare = [];
     var CMP_MAX = 3;
     var filtered = all;
@@ -2637,7 +2749,7 @@
     function bindPicks() {
       $$('[data-pick]:not([data-bound])', grid).forEach(function (b) {
         b.setAttribute('data-bound', '1');
-        b.addEventListener('click', function () { toggle(b.getAttribute('data-pick'), b); });
+        b.addEventListener('click', function () { shortlist.toggle(b.getAttribute('data-pick')); });
       });
       $$('[data-cmp]:not([data-bound])', grid).forEach(function (b) {
         b.setAttribute('data-bound', '1');
@@ -2755,17 +2867,11 @@
       });
       $$('[data-cmp-drop]', cmpBox).forEach(function (b) { b.addEventListener('click', function () { toggleCompare(b.getAttribute('data-cmp-drop')); }); });
       $$('[data-cmp-pick]', cmpBox).forEach(function (b) {
-        b.addEventListener('click', function () {
-          var name = b.getAttribute('data-cmp-pick');
-          var gb = $$('[data-pick]', grid).filter(function (x) { return x.getAttribute('data-pick') === name; })[0];
-          if (gb) toggle(name, gb);
-          else { var k = selected.indexOf(name); if (k > -1) selected.splice(k, 1); else selected.push(name); paintTray(); }
-          paintTable();
-        });
+        // the shortlist's change listener repaints this table
+        b.addEventListener('click', function () { shortlist.toggle(b.getAttribute('data-cmp-pick')); });
       });
       $('[data-cmp-book]', cmpBox).addEventListener('click', function () {
-        us.forEach(function (u) { if (selected.indexOf(u.name) < 0) selected.push(u.name); });
-        try { localStorage.setItem('tcShortlist', JSON.stringify(selected)); } catch (err) { /* storage off */ }
+        us.forEach(function (u) { shortlist.add(u.name); });
         window.location.href = './index.html#contact';
       });
     }
@@ -2786,43 +2892,40 @@
     cmpBox.addEventListener('click', function (e) { if (e.target === cmpBox) closeCompare(); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeCompare(); });
 
-    function toggle(name, btn) {
-      var i = selected.indexOf(name);
-      if (i > -1) selected.splice(i, 1); else selected.push(name);
-      var on = i < 0;
-      btn.setAttribute('aria-pressed', on);
-      btn.innerHTML = '<i>' + icon(on ? 'i-check' : 'i-plus') + '</i>' + (on ? 'Shortlisted' : 'Shortlist');
-      btn.closest('.ucard').classList.toggle('is-on', on);
-      paintTray();
+    // Only buttons whose state changed are redrawn, so the others' attention cue keeps its rhythm
+    function paintPick(b) {
+      var on = selected.indexOf(b.getAttribute('data-pick')) > -1;
+      if (b.getAttribute('aria-pressed') === String(on)) return;
+      b.setAttribute('aria-pressed', on);
+      b.innerHTML = '<i>' + icon(on ? 'i-check' : 'i-plus') + '</i>' + (on ? 'Shortlisted' : 'Shortlist');
+      b.closest('.ucard').classList.toggle('is-on', on);
     }
+    shortlist.onChange(function (list, added) {
+      selected = list;
+      $$('[data-pick]', grid).forEach(paintPick);
+      paintTray(added);
+      if (cmpBox.classList.contains('is-open')) paintTable();
+    });
 
-    function paintTray() {
+    var trayCue = tray && trayCount ? shortlistNotice(tray, trayCount, function (n, added) {
+      if (!trayNames) return;
+      trayNames.innerHTML = (added ? '<span class="tray__added">Added: ' + esc(shortName(added)) + '</span>'
+        : esc(selected.slice(-2).join(', ')) + (n > 2 ? ' +' + (n - 2) + ' more' : '')) +
+        '<small>' + n + (n === 1 ? ' institution' : ' institutions') + ' shortlisted</small>';
+    }, false) : null;
+    function paintTray(added) {
       var n = selected.length;
       if (tray) {
         tray.classList.toggle('is-on', n > 0);
         document.body.classList.toggle('has-tray', n > 0);
-        if (trayCount) {
-          trayCount.textContent = n;
-          trayCount.classList.remove('bump'); trayCount.offsetWidth; trayCount.classList.add('bump');
-        }
-        if (trayNames) trayNames.innerHTML = esc(selected.slice(-2).join(', ')) + (n > 2 ? ' +' + (n - 2) + ' more' : '') +
-          '<small>' + n + (n === 1 ? ' institution' : ' institutions') + ' shortlisted</small>';
+        if (trayCue) trayCue(selected, added);
       }
-      try { if (selected.length) localStorage.setItem('tcShortlist', JSON.stringify(selected)); } catch (err) { /* storage off */ }
       var dest = selected.join(', ') || 'General Ireland Inquiry';
       setDestination(dest, modal || document);
       if (modalSubmit) modalSubmit.textContent = n ? 'Apply to ' + n + (n === 1 ? ' institution' : ' institutions') : 'Submit my profile';
     }
 
-    function clearSelection() {
-      selected = [];
-      $$('[data-pick]', grid).forEach(function (b) {
-        b.setAttribute('aria-pressed', 'false');
-        b.innerHTML = '<i>' + icon('i-plus') + '</i>Shortlist';
-        b.closest('.ucard').classList.remove('is-on');
-      });
-      paintTray();
-    }
+    function clearSelection() { shortlist.clear(); }
 
     /* --- Wiring --- */
     var t = null;
@@ -2898,10 +3001,7 @@
     }
     // Shortlist -> the free counselling boarding pass on the home page
     $$('[data-tray-apply]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        try { localStorage.setItem('tcShortlist', JSON.stringify(selected)); } catch (err) { /* storage off */ }
-        window.location.href = './index.html#contact';
-      });
+      b.addEventListener('click', function () { window.location.href = './index.html#contact'; });   // the shortlist is already saved
     });
     $$('[data-modal-close]').forEach(function (b) { b.addEventListener('click', closeModal); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeModal(); });
@@ -2937,6 +3037,7 @@
   applyOrigin();
   initForms();
   initCheckin();
+  initShortlistFab();
   initChat();
   initDockPin();
   initDirectory();

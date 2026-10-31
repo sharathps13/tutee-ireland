@@ -420,7 +420,7 @@
         <div class="pass__perf"></div>
         <div class="pass__foot"><div>Rank<b data-pass-rank>#1</b></div><div>Type<b data-pass-type>University</b></div><div>Courses<b data-pass-courses>1,655</b></div></div>
         <div class="pass__barcode" aria-hidden="true"></div>
-        <div class="pass__cta"><button class="btn btn--dark" type="button" data-pass-apply>Get counselling for this university <svg><use href="#i-arrow"/></svg></button></div>
+        <div class="pass__cta"><button class="pick" type="button" data-pass-pick aria-pressed="false"><i><svg aria-hidden="true"><use href="#i-plus"/></svg></i>Add to my shortlist</button><button class="btn btn--dark" type="button" data-pass-apply>Get counselling for this university <svg><use href="#i-arrow"/></svg></button></div>
       </article>
     </div>
   </div>
@@ -694,7 +694,7 @@
           <div class="alert alert--err hidden" data-form-error role="alert"><svg><use href="#i-alert"/></svg><span data-form-error-text>Submission failed. Please try again.</span></div>
           <div class="ticket__stage">
             <fieldset class="tstep is-active" data-tstep="1">
-              <legend>Who's flying?</legend>
+              <legend tabindex="-1">Who's flying?</legend>
               <div class="field"><input id="f-name" name="name" type="text" placeholder=" " autocomplete="name" maxlength="120" required><label for="f-name">Your full name</label><svg><use href="#i-user"/></svg></div>
               <span class="topics-label" id="level-label">What are you aiming for?</span>
               <div class="topics topics--pick" role="radiogroup" aria-labelledby="level-label" data-levels>
@@ -709,16 +709,18 @@
                 <label class="topic"><input type="radio" name="intake" value="Within 12 months">Within 12 months</label>
                 <label class="topic"><input type="radio" name="intake" value="Later">Later / exploring</label>
               </div>
-              <div class="prefs hidden" data-prefs>
-                <span class="topics-label">Your shortlisted universities</span>
-                <ul class="prefs__list" data-prefs-list></ul>
-                <a class="prefs__edit" href="./universities.html" target="_blank" rel="noopener">+ Add or change universities</a>
+              <div class="field"><input id="f-course" name="course" type="text" placeholder=" " autocomplete="off" maxlength="120"><label for="f-course">Subject (e.g. Data Science)</label><svg><use href="#i-book"/></svg></div>
+              <!-- Chips mirror the shared shortlist (cards, boarding pass, floating button); × removes one everywhere -->
+              <div class="prefs is-empty" data-prefs>
+                <span class="topics-label" id="prefs-label">Your shortlisted universities</span>
+                <ul class="prefs__list" data-prefs-list aria-labelledby="prefs-label" hidden></ul>
+                <p class="prefs__foot"><span class="prefs__none">None yet, and it's optional.</span><a class="prefs__edit" href="./universities.html" target="_blank" rel="noopener">+ Add universities</a></p>
               </div>
               <input type="hidden" name="shortlist" value="" data-prefs-input>
               <div class="tstep__row"><button class="btn btn--dark" type="button" data-tnext>Continue to contact details <svg><use href="#i-arrow"/></svg></button></div>
             </fieldset>
             <fieldset class="tstep" data-tstep="2">
-              <legend>Where can we reach you?</legend>
+              <legend tabindex="-1">Where can we reach you?</legend>
               <div class="field"><input id="f-email" name="email" type="email" inputmode="email" placeholder=" " autocomplete="email" maxlength="200" required><label for="f-email">Email address</label><svg><use href="#i-mail"/></svg></div>
               <div class="phone">
                 <div class="field"><select name="country_code" aria-label="Country code" data-cc></select></div>
@@ -728,7 +730,6 @@
                 <div class="field field--select" data-pick><select id="f-state" name="state" required><option value="" selected disabled hidden></option><optgroup label="India"><option>Andhra Pradesh</option><option>Arunachal Pradesh</option><option>Assam</option><option>Bihar</option><option>Chhattisgarh</option><option>Goa</option><option>Gujarat</option><option>Haryana</option><option>Himachal Pradesh</option><option>Jharkhand</option><option>Karnataka</option><option>Kerala</option><option>Madhya Pradesh</option><option>Maharashtra</option><option>Manipur</option><option>Meghalaya</option><option>Mizoram</option><option>Nagaland</option><option>Odisha</option><option>Punjab</option><option>Rajasthan</option><option>Sikkim</option><option>Tamil Nadu</option><option>Telangana</option><option>Tripura</option><option>Uttar Pradesh</option><option>Uttarakhand</option><option>West Bengal</option><option>Andaman and Nicobar Islands</option><option>Chandigarh</option><option>Dadra and Nagar Haveli and Daman and Diu</option><option>Delhi</option><option>Jammu and Kashmir</option><option>Ladakh</option><option>Lakshadweep</option><option>Puducherry</option></optgroup><optgroup label="Outside India"><option>United Arab Emirates</option><option>Other country</option></optgroup></select><span class="pick__val" aria-hidden="true"></span><label for="f-state">Your state</label><svg><use href="#i-pin"/></svg></div>
                 <div class="field field--select" data-pick><select id="f-time" name="call_time"><option value="" selected disabled hidden></option><option>Morning (9 am &ndash; 12 pm)</option><option>Afternoon (12 &ndash; 4 pm)</option><option>Evening (4 &ndash; 8 pm)</option><option>Anytime</option></select><span class="pick__val" aria-hidden="true"></span><label for="f-time">Call time</label><svg><use href="#i-clock"/></svg></div>
               </div>
-              <div class="field"><input id="f-course" name="course" type="text" placeholder=" " autocomplete="off" maxlength="120"><label for="f-course">Subject (e.g. Data Science)</label><svg><use href="#i-book"/></svg></div>
               <div class="tstep__row">
                 <button class="tback" type="button" data-tback><svg><use href="#i-chev-l"/></svg>Back</button>
                 <button class="btn" type="submit" data-submit-btn>Board now: book my free session</button>
@@ -831,6 +832,14 @@
     </div>
   </div>
 </div>
+
+<!-- Floating shortlist: shows once a university is shortlisted, pops and names
+     each new one, and takes you to the boarding pass. Hidden while the form is on screen. -->
+<a class="slfab" href="./index.html#contact" data-scroll-to="contact" data-slfab hidden>
+  <span class="slfab__n" data-slfab-count>0</span>
+  <span class="slfab__txt"><b data-slfab-label aria-live="polite">0 shortlisted</b><small>Review &amp; check in</small></span>
+  <svg class="slfab__go" aria-hidden="true"><use href="#i-arrow"/></svg>
+</a>
 
 <!-- ======================= CHAT ======================= -->
 <!-- Quick contact dock: Tutee AI on the left, Reserve a call + WhatsApp on the right.

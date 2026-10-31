@@ -674,6 +674,7 @@ p { margin: 0 0 1em; }
 .pass__barcode { height: 44px; margin: 0 22px 18px; opacity: .85; background: repeating-linear-gradient(90deg, var(--forest) 0 2px, transparent 2px 4px, var(--forest) 4px 7px, transparent 7px 9px, var(--forest) 9px 10px, transparent 10px 13px, var(--forest) 13px 16px, transparent 16px 17px); }
 .pass__cta { padding: 0 22px 22px; display: grid; gap: 10px; }
 .pass__cta .btn { width: 100%; white-space: normal; text-align: center; }
+.pass__cta .pick { justify-content: center; min-height: 48px; font-size: .95rem; }
 @media (max-width: 960px) {
   .board-wrap { grid-template-columns: 1fr; }
   .pass--big { position: relative; top: 0; order: -1; max-width: 460px; width: 100%; justify-self: center; }
@@ -1308,13 +1309,20 @@ body.hdr-hidden .filters { top: 0; }
 .ucard__foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 14px; border-top: 1px dashed var(--line-strong); }
 .ucard__foot div { font-size: .8rem; color: var(--muted); font-weight: 600; line-height: 1.2; }
 .ucard__foot div b { display: block; font-family: var(--f-display); font-size: 1.1rem; color: var(--forest); }
-.pick { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 999px; border: 1.5px solid var(--line-strong); background: #fff; font-weight: 700; font-size: .88rem; color: var(--forest); transition: background-color .25s, color .25s, border-color .25s, transform .2s; }
-.pick:hover { border-color: var(--forest); }
+/* Shortlist: a shamrock outline and a filled + so it reads as the card's main
+   control next to the neutral Compare button; solid shamrock once shortlisted. */
+.pick { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 999px; border: 1.5px solid var(--shamrock); background: #fff; font-weight: 700; font-size: .88rem; color: var(--forest); transition: background-color .25s, color .25s, border-color .25s, transform .2s; }
+.pick:hover { background: var(--mint); }
 .pick:active { transform: scale(.95); }
-.pick i { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--mist); transition: background-color .25s, transform .4s var(--ease); }
+.pick i { position: relative; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--shamrock); color: #fff; transition: background-color .25s, transform .4s var(--ease); }
 .pick i svg { width: 12px; height: 12px; }
 .pick[aria-pressed="true"] { background: var(--shamrock); border-color: var(--shamrock); color: #fff; }
 .pick[aria-pressed="true"] i { background: #fff; color: var(--shamrock); transform: rotate(360deg); }
+/* Attention cue: a soft ring leaves the + once every 7s, staggered card to
+   card by --i so they never pulse together. Stops once shortlisted. */
+.pick i::after { content: ''; position: absolute; inset: -3px; border-radius: 50%; border: 2px solid var(--shamrock); opacity: 0; pointer-events: none; }
+.pick[aria-pressed="false"] i::after { animation: pickPing 7s var(--ease) calc(1.5s + var(--i, 0) * .55s) infinite; }
+@keyframes pickPing { 0% { opacity: .8; transform: scale(1); } 16%, 100% { opacity: 0; transform: scale(2.2); } }
 .ugrid.is-list .ucard { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px 20px; padding: 16px 18px; }
 .ugrid.is-list .ucard__top { grid-row: span 2; }
 .ugrid.is-list .ucard__top .utype { display: none; }
@@ -1335,25 +1343,80 @@ body.hdr-hidden .filters { top: 0; }
 .cta-band svg.knot { position: absolute; right: -40px; top: -60px; width: 220px; height: 220px; color: rgba(12,58,51,.1); animation: spin 50s linear infinite; }
 @media (max-width: 760px) { .cta-band { grid-template-columns: 1fr; } }
 
-.tray { position: fixed; left: 50%; bottom: 18px; z-index: 90; width: min(calc(100% - 28px), 720px); display: flex; align-items: center; gap: 14px; padding: 10px 10px 10px 18px; border-radius: 999px; background: var(--forest); color: #fff; box-shadow: 0 24px 50px -20px rgba(8,40,34,.8); transform: translate(-50%, 140%); transition: transform .55s var(--ease); }
+/* Shortlist tray: the site's CTA amber with a white rim, so it stands out on
+   the light results and the dark footer alike; its button is the dark one. */
+.tray { position: fixed; left: 50%; bottom: 18px; z-index: 90; width: min(calc(100% - 28px), 720px); display: flex; align-items: center; gap: 14px; padding: 10px 10px 10px 18px; border-radius: 999px; background: var(--amber); color: var(--forest); box-shadow: 0 24px 50px -18px rgba(8,40,34,.75), 0 0 0 2px rgba(255,255,255,.9); transform: translate(-50%, 140%); transition: transform .55s var(--ease); }
 .tray.is-on { transform: translate(-50%, 0); }
-.tray__count { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--amber); color: var(--forest); font-family: var(--f-display); font-weight: 800; font-size: 1.1rem; }
-.tray__count.bump { animation: bump .4s cubic-bezier(.3,1.6,.5,1); }
+.tray__count { position: relative; flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--forest); color: var(--gold); font-family: var(--f-display); font-weight: 800; font-size: 1.1rem; }
 @keyframes bump { 50% { transform: scale(1.3); } }
 .tray__names { flex: 1; min-width: 0; font-weight: 700; font-size: .9rem; overflow-wrap: break-word; }
-.tray__names small { display: block; font-weight: 600; font-size: .76rem; opacity: .65; }
-.tray .btn { padding: 12px 20px; flex: none; }
-.tray__clear { flex: none; width: 40px; height: 40px; border-radius: 50%; border: 0; background: rgba(255,255,255,.1); color: #fff; display: grid; place-items: center; }
+.tray__names small { display: block; font-weight: 700; font-size: .76rem; opacity: .8; }
+.tray__added { font-family: var(--f-display); font-weight: 800; }
+.tray .btn { padding: 12px 20px; flex: none; min-height: 48px; }
+.tray__clear { flex: none; width: 44px; height: 44px; border-radius: 50%; border: 0; background: rgba(12,58,51,.12); color: var(--forest); display: grid; place-items: center; transition: background-color .25s; }
+.tray__clear:hover { background: rgba(12,58,51,.22); }
 .tray__clear svg { width: 17px; height: 17px; }
+
+/* Shortlist notices (this tray, the home page's floating button): on every
+   add the box pops, the count flips and a ring ripples out; a removal just
+   settles the count; a soft glow every ~10s until the first click (.is-idle). */
+.tray.is-bump { animation: trayPop .45s cubic-bezier(.3,1.6,.5,1); }
+@keyframes trayPop { 45% { scale: 1.04; } }
+.tray__count.is-flip, .slfab__n.is-flip { animation: slFlip .5s cubic-bezier(.3,1.5,.5,1); }
+@keyframes slFlip { 0% { transform: none; } 45% { transform: scale(1.3) rotateX(90deg); } 100% { transform: none; } }
+.tray__count.is-settle, .slfab__n.is-settle { animation: slSettle .35s var(--ease); }
+@keyframes slSettle { from { transform: scale(.82); } }
+.tray__count::after { content: ''; position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--forest); opacity: 0; pointer-events: none; }
+.tray.is-bump .tray__count::after { animation: slRipple .7s ease-out; }
+@keyframes slRipple { from { opacity: .9; transform: none; } to { opacity: 0; transform: scale(2); } }
+.tray::before, .slfab::before { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: 0 0 0 5px rgba(249,199,79,.6), 0 0 34px 8px rgba(242,146,43,.6); opacity: 0; pointer-events: none; }
+.tray.is-idle::before, .slfab.is-idle::before { animation: slGlow 10s ease-in-out 3s infinite; }
+@keyframes slGlow { 0%, 100% { opacity: 0; } 8% { opacity: 1; } 18% { opacity: 0; } }
 @media (max-width: 520px) {
   .tray { border-radius: 22px; flex-wrap: wrap; gap: 10px 12px; padding: 12px; }
   .tray .btn { flex: 1 0 100%; padding: 11px 14px; font-size: .88rem; white-space: normal; }
   /* the names are marked on each card; the tray keeps just the count line so it stays compact */
   .tray__names { font-size: 0; }
   .tray__names small { font-size: .84rem; opacity: .85; }
+  .tray__added { display: block; font-size: .9rem; }
 }
 body.has-tray .dock { bottom: 92px; }
 @media (max-width: 640px) { body.has-tray .dock { bottom: 0; } .tray { bottom: calc(76px + env(safe-area-inset-bottom)); } }
+
+/* ---------- Floating shortlist (home page) ----------
+   Centred between Tutee AI and the call buttons; above the dock where the
+   two would meet. Rests out of sight while the boarding pass is on screen. */
+.slfab {
+  position: fixed; left: 50%; bottom: 20px; z-index: 96; transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 12px; min-height: 56px; width: max-content; max-width: min(440px, calc(100vw - 32px));
+  padding: 8px 18px 8px 8px; border-radius: 999px; background: var(--amber); color: var(--forest); text-decoration: none;
+  font-family: var(--f-display); box-shadow: 0 22px 44px -16px rgba(8,40,34,.75), 0 0 0 2px rgba(255,255,255,.9);
+  transition: opacity .35s, transform .45s var(--ease), visibility 0s, background-color .25s;
+}
+.slfab[hidden] { display: none; }
+.slfab:hover { background: var(--amber-2); }
+.slfab.is-away { opacity: 0; visibility: hidden; transform: translate(-50%, 24px); pointer-events: none; transition: opacity .3s, transform .45s var(--ease), visibility 0s .45s; }
+.slfab__n { position: relative; flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--forest); color: var(--gold); font-weight: 800; font-size: 1.1rem; }
+.slfab__txt { min-width: 0; display: grid; line-height: 1.15; }
+.slfab__txt b { font-weight: 800; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slfab__txt small { font-family: var(--f-body); font-weight: 700; font-size: .78rem; opacity: .8; white-space: nowrap; }
+.slfab__go { flex: none; width: 18px; height: 18px; transition: transform .35s var(--ease); }
+.slfab:hover .slfab__go { transform: translateX(3px); }
+.slfab.is-enter { animation: slIn .6s cubic-bezier(.3,1.4,.5,1); }
+@keyframes slIn { from { opacity: 0; translate: 0 30px; scale: .85; } }
+.slfab.is-bump { animation: slPop .45s cubic-bezier(.3,1.6,.5,1); }
+@keyframes slPop { 45% { scale: 1.12; } }
+.slfab::after { content: ''; position: absolute; inset: 0; border-radius: inherit; border: 2px solid var(--amber); opacity: 0; pointer-events: none; }
+.slfab.is-bump::after { animation: slRippleWide .7s ease-out; }
+@keyframes slRippleWide { from { opacity: .9; transform: none; } to { opacity: 0; transform: scale(1.12, 1.7); } }
+@media (max-width: 999px) { .slfab { bottom: 96px; } }
+@media (max-width: 640px) { .slfab { bottom: calc(76px + env(safe-area-inset-bottom)); min-height: 52px; } }
+/* Reduced motion: no ping, pop, ripple or glow; the stronger resting colours
+   carry it, and the label still changes to "Added: …" */
+@media (prefers-reduced-motion: reduce) {
+  .pick i::after, .tray::before, .tray__count::after, .slfab::before, .slfab::after { display: none; }
+  .slfab.is-enter, .slfab.is-bump, .tray.is-bump, .tray__count.is-flip, .slfab__n.is-flip, .tray__count.is-settle, .slfab__n.is-settle { animation: none !important; }
+}
 
 .modal { position: fixed; inset: 0; z-index: 150; display: grid; place-items: center; padding: 16px; visibility: hidden; pointer-events: none; }
 .modal.is-open { visibility: visible; pointer-events: auto; }
@@ -1667,10 +1730,16 @@ body.has-tray .dock { bottom: 92px; }
 .prefs__list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .prefs__list li { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 6px 6px 6px 12px; border-radius: 999px; background: var(--mint); color: var(--forest); font-weight: 700; font-size: .84rem; animation: msgIn .3s var(--ease); }
 .prefs__list li span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.prefs__list button { width: 24px; height: 24px; flex: none; border: 0; border-radius: 50%; display: grid; place-items: center; background: #fff; color: var(--forest); transition: background-color .2s, color .2s; }
+.prefs__list button { width: 28px; height: 28px; flex: none; border: 0; border-radius: 50%; display: grid; place-items: center; background: #fff; color: var(--forest); transition: background-color .2s, color .2s; }
 .prefs__list button:hover { background: var(--claret); color: #fff; }
 .prefs__list svg { width: 13px; height: 13px; }
 .prefs__edit { font-size: .82rem; font-weight: 700; color: var(--shamrock); }
+.prefs__list[hidden] { display: none; }
+.prefs__foot { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin: 0; font-size: .82rem; }
+.prefs__none { color: var(--muted); font-weight: 600; }
+.prefs:not(.is-empty) .prefs__none { display: none; }
+.prefs__edit { display: inline-block; padding: 4px 0; text-underline-offset: 3px; }
+.prefs__edit:hover { color: var(--forest); }
 .note { position: relative; margin-bottom: 14px; }
 .note .topics-label span { font-weight: 600; opacity: .75; }
 .note textarea {
