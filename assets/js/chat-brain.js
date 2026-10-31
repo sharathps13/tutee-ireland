@@ -86,7 +86,8 @@
     'ireland irish country',
     'need needs require required requirement requirements eligibility eligible criteria',
     'land landing arrive arrival',
-    'intake intakes deadline deadlines start september january'
+    // months are left out: "January intake" must not match a passage that only mentions "15 January"
+    'intake intakes deadline deadlines start'
   ];
   var SYN = {};
   SYN_GROUPS.forEach(function (g) {
@@ -391,7 +392,12 @@
     return out;
   }
 
-  var MONEY = /\b(how much|cost|costs|fee|fees|tuition|price|prices|expensive|cheap|budget|salary|salaries|wage|wages|pay|euro|euros|rupees?|lakhs?|inr)\b|[€£$₹]/i;
+  // [the question mentions this, so the answer must mention this]
+  var ANCHORS = [
+    [/\b(intakes?|intak\w*|semesters?|deadlines?|start dates?|batch)\b/, /\b(intakes?|semesters?|deadlines?|start dates?|academic year)\b/i],
+    [/\b(near|nearby|close to|closest to|nearest|walking distance|distance from|next to)\b/, /\b(near|nearby|minutes?|km|walk|close to|distance)\b/i]
+  ];
+  var MONEY =/\b(how much|cost|costs|fee|fees|tuition|price|prices|expensive|cheap|budget|salary|salaries|wage|wages|pay|euro|euros|rupees?|lakhs?|inr)\b|[€£$₹]/i;
   var SMALLTALK = [
     [/^\s*(hi|hello|hey|hiya|good (morning|afternoon|evening)|namaste)\b[\s!.]*$/i, 'greet'],
     [/^\s*(bye|goodbye|see you|that'?s all|that is all)\b[\s!.]*$/i, 'bye'],
@@ -482,6 +488,17 @@
     });
     return out;
   }
+  // Places people name instead of a town ("near Temple Bar"), and the town on our directory they are in or nearest to.
+  var NEAR = /\b(near|nearby|close to|closest to|nearest|next to|walking distance|distance from|around)\b/;
+  var LANDMARKS = [
+    [/\b(temple bar|trinity|guinness|st\.? stephen'?s green|grafton street|o'?connell street|phoenix park|croke park|dublin castle|the spire|ha'?penny bridge|docklands|aviva|dublin airport)\b/, 'dublin', 'Dublin'],
+    [/\b(english market|blarney|cobh|fota|cork airport)\b/, 'cork', 'Cork'],
+    [/\b(eyre square|salthill|connemara|aran islands|spanish arch)\b/, 'galway', 'Galway'],
+    [/\b(king john'?s castle|bunratty|shannon)\b/, 'limerick', 'Limerick'],
+    [/\b(ring of kerry|killarney national park|muckross)\b/, 'killarney', 'Killarney'],
+    [/\b(waterford crystal|house of waterford)\b/, 'waterford', 'Waterford']
+  ];
+  function landmarkIn(lq) { for (var i = 0; i < LANDMARKS.length; i++) if (LANDMARKS[i][0].test(lq)) return LANDMARKS[i]; return null; }
   function cityIn(lq) {
     return cities.filter(function (c) { return new RegExp('\\b' + c + '\\b').test(lq); })
       .sort(function (a, b) { return b.length - a.length; })[0] || '';
@@ -553,6 +570,51 @@
       suggest: ['Tell me about ' + shortName(top[0])].concat(top[1] ? ['Compare ' + shortName(top[0]) + ' and ' + shortName(top[1])] : []).concat(city ? [] : [s[1] + ' in Cork']) };
   }
 
+  // Intakes: the site gives no dates, so say what's usual and hand over ("programs in the January intake").
+  // A month next to work is about holiday work hours, not a start date.
+  var MONTH = /\b(jan\w*|feb\w*|mar(?:ch)?|apr(?:il)?|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b|\b(?:in|from|for|the) (may)\b/;
+  var MONTHS = { jan: 'January', feb: 'February', mar: 'March', apr: 'April', may: 'May', jun: 'June', jul: 'July', aug: 'August', sep: 'September', oct: 'October', nov: 'November', dec: 'December' };
+  function intakeAnswer(lq) {
+    if (/\b(work\w*|jobs?|hours)\b/.test(lq)) return null;
+    var m = MONTH.exec(lq), mon = m && MONTHS[(m[1] || m[2]).slice(0, 3)];
+    var general = /\b(intakes?|intak\w*|in takes?|start dates?|semesters?)\b/.test(lq);
+    if (!(m ? general || /\b(start\w*|begin\w*|commenc\w*|batch|session|programmes?|programs?|courses?|admissions?|classes)\b/.test(lq) : general)) return null;
+    var text;
+    if (!mon) text = 'Ireland\'s main intake is **September**: most undergraduate and postgraduate courses start then. Some universities and colleges also take students in **January or February**, mostly for selected postgraduate (master\'s) courses. Each institution sets its own application deadlines.';
+    else if (/^(August|September|October)$/.test(mon)) text = '**September** is the main intake in Ireland: most undergraduate and postgraduate courses start then. Each institution sets its own application deadlines, and popular courses fill early.';
+    else if (/^(January|February|March)$/.test(mon)) text = 'Some Irish universities and colleges have a **January/February** intake, mostly for selected postgraduate (master\'s) courses. Most courses start in **September**. Which programmes run in January changes every year, so I can\'t give you a reliable list here.';
+    else text = 'Courses in Ireland mainly start in **September**, with a smaller **January/February** intake. A **' + mon + '** start isn\'t usual, so check with a counsellor before you plan around it.';
+    ctx = { uni: null, subject: null, city: '', facet: '' };
+    return { type: 'answer', text: text + '\n\nA counsellor can confirm the current intakes and deadlines for your course on the free call.',
+      sections: [{ id: 'contact', name: SECTION_NAMES.contact, page: 'home' }], suggest: ['Request a callback'] };
+  }
+
+  // Questions this site can't answer reliably (distances and travel times, whether your marks are enough, what can
+  // still start next month, the best area to live, a university's exact English score): say so, then hand over.
+  var NEEDS_COUNSELLOR = [
+    [/\b(how far|distance (from|to|between)|how long (does it|will it|would it|to) (take|get|reach|travel|commute)|commut\w*|by (train|bus|metro|tram|mrt|subway|tube|car)|travel time|minutes? (from|to|away)|km (from|to|away)|close to the city|far from)\b/, null,
+      'I can\'t give reliable distances or travel times: they depend on the exact campus and where you\'d live.'],
+    [/\b(next|this|coming) (month|week|few weeks)\b|\bstart\w* (soon|immediately|asap|right away)\b|\b(still|currently) (open|accepting)\b/, null,
+      'Which courses can still take you that soon depends on each university\'s current deadlines and places, which change all the time.'],
+    [/\b\d{2}(\.\d+)? ?(%|percent)|\b(percentage|marks|cgpa|gpa|backlogs?|gap year|study gap|year gap|education gap)\b/, /\b(admission|admit|get in|get into|eligib\w*|accept\w*|apply|qualify|enough|chances?|possible)\b/,
+      'Whether your marks are enough depends on the university, the course and the rest of your profile, so I won\'t guess.'],
+    [/\b(best|good|safe|safest|cheap\w*|nice) (area|areas|suburbs?|neighbou?rhoods?|localit(y|ies)|places?|part of (the )?(city|town)) (to (live|stay)|for students?)\b|\bwhere (should|can|do) (i|students) (live|stay)\b/, null,
+      'The best area to live depends on your campus, budget and lifestyle, and this site doesn\'t compare neighbourhoods.'],
+    [/\b(ielts|pte|toefl|duolingo)\b.*\b(scores?|bands?|minimum)\b|\b(scores?|bands?|minimum)\b.*\b(ielts|pte|toefl|duolingo)\b/, null,
+      'Each university sets its own minimum English test score, and it varies by course, so I won\'t quote one.'],
+    [/\b(distance learning|distance education|online (course|courses|degree|degrees|study|studies|classes|programmes?|programs?)|study online|studying online|remote study)\b/, null,
+      'A student visa is for full-time study on campus, and this site does not cover online or distance courses.']
+  ];
+  // "How do I apply?" (to a university, not for a visa, loan or scholarship): how applying works here, then hand over
+  var APPLY_Q = /\b(how (do|can|should|would|will) (i|we|one|students?) apply|how to apply|application process|admission process|applying (to|for) (a |an |the )?(universit\w*|unis?|college\w*|courses?|programm?e?s?|admissions?)|apply (to|for) (a |an |the )?(universit\w*|unis?|college\w*|courses?|programm?e?s?|admissions?))\b/;
+  function asksHowToApply(q) { return APPLY_Q.test(q) && !/\b(visa|pass|permit|stamp|loans?|scholarships?|bursar\w*|grants?|jobs?|work)\b/.test(q); }
+  function needsCounsellor(q) {
+    for (var i = 0; i < NEEDS_COUNSELLOR.length; i++) { var n = NEEDS_COUNSELLOR[i]; if (n[0].test(q) && (!n[1] || n[1].test(q))) return n[2]; }
+    return '';
+  }
+  // "universities near <a place we know>" is answered by its city instead
+  function namesLandmark(q) { return /b(near|nearby|nearest|close to|closest to|next to|around|walking distance)b/.test(q) && LANDMARKS.some(function (l) { return l.some(function (x) { return x instanceof RegExp && x.test(q); }); }); }
+
   var FACETS = [
     ['rank', /\b(rank|ranked|ranking|rankings|qs|position)\b/],
     ['where', /\b(where|location|located|which city|what city|address)\b/],
@@ -611,6 +673,19 @@
     return build().then(function () {
       q = fixTypos(q);
       var lq = q.toLowerCase();
+      var asked = String(question).toLowerCase();
+      var unsure = !namesLandmark(asked) && needsCounsellor(asked);
+      if (unsure) {
+        ctx = { uni: null, subject: null, city: '', facet: '' };
+        return { type: 'answer', text: unsure + ' A counsellor can check it for you on the free call.', sections: [{ id: 'contact', name: SECTION_NAMES.contact, page: 'home' }], suggest: ['Request a callback'] };
+      }
+      if (asksHowToApply(asked)) {
+        ctx = { uni: null, subject: null, city: '', facet: '' };
+        return { type: 'answer', text: 'You apply to each Irish university or college directly, usually online through its own application portal, for the course you choose. Once you have an offer, you apply for your Irish study visa online (AVATS).\n\nEntry requirements and deadlines differ by institution and course, so a counsellor checks them for your shortlist on the free call.',
+          sections: [{ id: 'contact', name: SECTION_NAMES.contact, page: 'home' }], suggest: ['Request a callback'] };
+      }
+      var byMonth = intakeAnswer(lq);
+      if (byMonth) return byMonth;
       var direct = directAnswer(lq, q);
       if (direct) return direct;
       // Questions about institutions in a named town get that town's list;
@@ -618,11 +693,16 @@
       var aboutInst = /\b(universit|college|institut|unis?\b|schools?\b|providers?\b|study options)/i.test(q);
       if (aboutInst) {
         var city = cityIn(lq);
-        var listy = /\b(how many|which|what|list|any|all|in)\b/.test(lq);
+        // the landmark is read from the question as typed too, as typo fixing may have changed its words
+        var near = NEAR.test(lq), spot = !city && near && (landmarkIn(lq) || landmarkIn(String(question).toLowerCase()));
+        if (spot) city = spot[1];
+        var listy = /\b(how many|which|what|list|any|all|in)\b/.test(lq) || near;
         if (city && listy) {
           var cl = passages.filter(function (p) { return p.city === city; })[0];
-          if (cl) { ctx = { uni: null, subject: null, city: city, facet: '' }; return { type: 'answer', text: cl.text, sections: [cl.sec], suggest: ['Computing and IT in ' + city.charAt(0).toUpperCase() + city.slice(1)] }; }
+          if (cl) { ctx = { uni: null, subject: null, city: city, facet: '' }; return { type: 'answer', text: (spot ? 'The nearest institutions on our directory are in **' + spot[2] + '**. This goes by town, not travel time; a counsellor can help with the commute.\n\n' : '') + cl.text, sections: [cl.sec], suggest: ['Computing and IT in ' + city.charAt(0).toUpperCase() + city.slice(1)] }; }
         }
+        // a place we cannot match to a town: ask for the town rather than guess
+        if (near && !city) return { type: 'contact', text: 'I can list institutions by town (for example Dublin, Cork, Galway or Limerick), but I didn\'t recognise the place in your question. Tell me the town, or ask one of our counsellors:' };
         // "language schools", "technological universities": that type's list
         var type = !city && types.filter(function (x) { return x !== 'university' && x !== 'college' && lq.indexOf(x.replace(/y$/, '')) > -1; })[0];
         if (type) {
@@ -656,7 +736,10 @@
       var unknown = terms.filter(function (qt) { return !qt.forms.some(function (f) { return df[f.t]; }); }).length;
       if (unknown) needCover = Math.max(needCover, 0.75);
       var money = MONEY.test(q);
-      if (!top || top.s < 2.2 || top.cover < needCover) {
+      // Some words carry the whole question: an answer that never mentions them is off topic,
+      // however well it matches the rest ("programs in the January intake" is not about work hours).
+      var anchorMiss = ANCHORS.some(function (a) { return a[0].test(lq) && !a[1].test(top ? top.p.title + ' ' + top.p.text : ''); });
+      if (!top || top.s < 2.2 || top.cover < needCover || anchorMiss) {
         return { type: 'notfound', money: money, suggest: top ? asks(top.s * 0.5, []) : [] };
       }
       // A second passage when it is nearly as relevant and adds something new.
