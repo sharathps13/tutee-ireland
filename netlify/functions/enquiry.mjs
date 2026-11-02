@@ -101,7 +101,7 @@ const KNOWN_FIELDS = new Set(['name', 'email', 'phone', 'phone_number',
   'country_code', 'destination', 'from_name', 'page', 'botcheck',
   'access_key', 'subject', 'state', 'course', 'call_time', 'shortlist',
   'study_level', 'intake', 'form_location', 'utm_source', 'utm_medium',
-  'utm_campaign', 'utm_content', 'cta_source', 'qualification', 'english_test']);
+  'utm_campaign', 'utm_content', 'gclid', 'cta_source', 'qualification', 'english_test']);
 const MAX_EXTRA_FIELDS = 12;
 
 /** Collapse whitespace and strip CR/LF.
@@ -187,6 +187,8 @@ export function parsePayload(raw) {
     english_test: clean(data.english_test, FIELD_LIMITS.english_test),
     utm: ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content']
       .map((k) => clean(data[k], 100)).filter(Boolean),
+    // Google Ads click id, so a qualified lead can later be uploaded as an offline conversion
+    gclid: clean(data.gclid, 200),
     extras,
     botcheck: data.botcheck,
   };
@@ -212,6 +214,7 @@ export function leadSource(f, country, leadRef = '') {
   return [page, where].filter(Boolean).join(' – ')
     + (f.utm.length ? ` (${f.utm.join(' / ')})` : '')
     + (f.cta_source && f.cta_source !== 'direct' ? ` · via ${f.cta_source}` : '')
+    + (f.gclid ? ` · gclid ${f.gclid}` : '')
     + (leadRef ? ` · ref ${leadRef}` : '');
 }
 
@@ -455,7 +458,7 @@ export async function handle(rawBody, headers = {}) {
       payload: {
         success: false,
         message: 'We could not send your enquiry right now. Please try again, '
-          + 'or email business@tuteeconnect.com.',
+          + 'or email info@tuteeconnect.com.',
       },
     };
   }
@@ -542,7 +545,7 @@ export default async function (req) {
     return json(500, {
       success: false,
       message: 'We could not send your enquiry right now. Please email '
-        + 'business@tuteeconnect.com directly.',
+        + 'info@tuteeconnect.com directly.',
     });
   }
 }

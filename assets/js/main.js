@@ -1332,7 +1332,7 @@
   }
 
   /* Campaign attribution: remember UTM tags from the landing URL for the visit. */
-  var UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content'];
+  var UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'gclid'];
   var UTM = (function () {
     var out = {};
     try {
