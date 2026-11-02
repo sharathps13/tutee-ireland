@@ -172,6 +172,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=ROOT, **kwargs)
 
+    def translate_path(self, path):
+        # Netlify's pretty URLs: /universities serves universities.html, as on the live site.
+        real = super().translate_path(path)
+        if not os.path.splitext(real)[1] and not os.path.isdir(real) and os.path.isfile(real + '.html'):
+            return real + '.html'
+        return real
+
     def do_GET(self):
         if self.path.split('?')[0] == '/api/news':
             status, body = news_body()

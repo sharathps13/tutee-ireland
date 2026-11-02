@@ -16,21 +16,21 @@ window.IE_SERVICES = [
   },
   {
     title: 'College selection',
-    tagline: 'Access 200+ Irish institutions',
+    tagline: "Shortlists from Ireland's official registers",
     icon: 'i-compass',
-    desc: "We maintain strong relationships with institutions across Ireland. Based on your interests and academic record, our experts recommend the best-fit courses and universities across Leinster, Munster, Connacht and Ulster.\n\nModule structures, credit requirements, placement years and post-graduation prospects are all explained clearly, so you can make the right decision with confidence."
+    desc: "Based on your interests and academic record, our experts recommend best-fit courses and universities across Leinster, Munster, Connacht and Ulster.\n\nModule structures, credit requirements, placement years and post-graduation prospects are all explained clearly, so you can make the right decision with confidence."
   },
   {
     title: 'Documentation',
     tagline: 'Statements of purpose that stand out',
     icon: 'i-file',
-    desc: "Good documentation dramatically improves your chances at every stage of the university and visa process. We share samples, clear requirements and exact formatting for every key document: Statement of Purpose, academic references and transcripts.\n\nWe review everything several times before you apply, so problems are caught early. We have handled many complicated cases successfully, and our admission experts will help you prepare flawless files for both your university applications and your visa."
+    desc: "Clear, complete documents matter at every stage of the university and visa process. We share samples, clear requirements and exact formatting for every key document: Statement of Purpose, academic references and transcripts.\n\nWe review everything several times before you apply, so problems are caught early, and our admission experts help you prepare complete, well-presented files for both your university applications and your visa."
   },
   {
     title: 'Study visa',
-    tagline: 'Complete files. Avoid refusals.',
+    tagline: 'Complete, consistent applications',
     icon: 'i-passport',
-    desc: "We provide end-to-end Irish Student Visa support: your Letter of Acceptance, fee payment, private medical insurance and the online AVATS application, step by step through the Immigration Service Delivery criteria.\n\nOur processing team helps you build a clear financial profile and sponsor documents that meet the proof-of-funds requirement. Because Irish study visas are decided on the file rather than at an interview, a complete, consistent application is the single best way to avoid an unnecessary refusal."
+    desc: "We provide end-to-end Irish Student Visa support: your Letter of Acceptance, fee payment, private medical insurance and the online AVATS application, step by step through the Immigration Service Delivery criteria.\n\nOur processing team helps you build a clear financial profile and sponsor documents for the proof-of-funds requirement, so your application is complete and consistent. The decision itself rests with Ireland's immigration authorities, and no agent can guarantee it."
   },
   {
     title: 'End-to-end settlement',
@@ -42,7 +42,7 @@ window.IE_SERVICES = [
     title: 'Financial aid',
     tagline: 'Loans and Irish scholarships',
     icon: 'i-landmark',
-    desc: "Worried about proof of funds, tuition and accommodation? We have direct tie-ups with reputed national banks and private lenders offering both collateral and non-collateral education loans.\n\nBesides tuition, partner loans can also cover accommodation during your course, and we connect you with bank executives for quick sanctions. Students with strong academics are guided on securing merit-based scholarships and bursaries directly from their chosen Irish institutions."
+    desc: "Worried about proof of funds, tuition and accommodation? We work with partner lenders, from national banks to private lenders, offering both collateral and non-collateral education loans.\n\nBesides tuition, partner loans can also cover accommodation during your course, and we connect you with the lender's team to move your application along. Students with strong academics are guided on applying for merit-based scholarships and bursaries directly from their chosen Irish institutions."
   },
   {
     title: 'Post-landing',

@@ -165,8 +165,9 @@ names; `University` is the seven Irish Universities Association members.
   The page deliberately quotes no fees, fund thresholds or wages.
 - **Re-pull the registers** before launch and re-run `build_dataset_ie.py`. The ILEP is explicitly
   *interim* and TrustEd Ireland is actively replacing it; provider lists change monthly.
-- **`200+` Ireland Tie-ups, `99%` success rate, `5k+` students** are the client's own marketing
-  claims carried over from the reference site. Confirm the client stands behind them for Ireland.
+- The reference site's tie-up count, success-rate and student-count claims, and a copied
+  testimonial, were removed in the October/November 2026 SEO pass. Do not bring back a figure
+  or a testimonial the client cannot evidence.
 - **Photo attributions are mandatory.** All four photographs are CC-BY (none is CC0, unlike the
   Canadian set), so the footer credit line cannot be emptied. See `assets/img/photos/CREDITS.md`.
 - Enquiries go to business@tuteeconnect.com via `/api/enquiry`; see

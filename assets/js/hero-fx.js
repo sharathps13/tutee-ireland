@@ -16,7 +16,8 @@
    picture used; nothing is generated.
 
    Without WebGL, with reduced motion or with data saver on, nothing here
-   runs and the plain photo already in the page stays.
+   runs and the plain photo already in the page stays. main.js (loadHeroFx)
+   adds this script only after the page has loaded and the browser is idle.
    ========================================================================== */
 (function () {
   'use strict';

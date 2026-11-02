@@ -90,7 +90,7 @@ const COUNTRY_ALIASES = {
 const FIELD_LIMITS = {
   name: 120, email: 200, phone: 40, destination: 600, subject: 200, from_name: 120,
   state: 80, course: 120, call_time: 80, shortlist: 1500, study_level: 40, intake: 60,
-  form_location: 80,
+  form_location: 80, cta_source: 60, qualification: 80, english_test: 40,
 };
 
 // Fields this handler consumes by name. Anything else the form grows later is
@@ -101,7 +101,7 @@ const KNOWN_FIELDS = new Set(['name', 'email', 'phone', 'phone_number',
   'country_code', 'destination', 'from_name', 'page', 'botcheck',
   'access_key', 'subject', 'state', 'course', 'call_time', 'shortlist',
   'study_level', 'intake', 'form_location', 'utm_source', 'utm_medium',
-  'utm_campaign', 'utm_content']);
+  'utm_campaign', 'utm_content', 'cta_source', 'qualification', 'english_test']);
 const MAX_EXTRA_FIELDS = 12;
 
 /** Collapse whitespace and strip CR/LF.
@@ -182,6 +182,9 @@ export function parsePayload(raw) {
     study_level: clean(data.study_level, FIELD_LIMITS.study_level),
     intake: clean(data.intake, FIELD_LIMITS.intake),
     form_location: clean(data.form_location, FIELD_LIMITS.form_location),
+    cta_source: clean(data.cta_source, FIELD_LIMITS.cta_source),
+    qualification: clean(data.qualification, FIELD_LIMITS.qualification),
+    english_test: clean(data.english_test, FIELD_LIMITS.english_test),
     utm: ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content']
       .map((k) => clean(data[k], 100)).filter(Boolean),
     extras,
@@ -189,20 +192,27 @@ export function parsePayload(raw) {
   };
 }
 
-/** "Master's – Data Science (Next intake)": level, course and start together,
- * matching the sheet's single Course column. */
+/** "Master's – Data Science (Next intake) · B.Tech, 72% · English: Test booked":
+ * level, course and start, then the optional qualification and English test,
+ * all in the sheet's single Course column (the sheet itself is unchanged). */
 export function courseLine(f) {
   const level = /^not sure/i.test(f.study_level) ? 'Level not decided' : f.study_level;
   const main = [level, f.course].filter(Boolean).join(' – ');
-  return main + (f.intake ? `${main ? ' ' : ''}(${f.intake})` : '');
+  return main + (f.intake ? `${main ? ' ' : ''}(${f.intake})` : '')
+    + (f.qualification ? ` · ${f.qualification}` : '')
+    + (f.english_test ? ` · English: ${f.english_test}` : '');
 }
 
-/** Where the lead came from: page, then form, then any campaign tags. */
-export function leadSource(f, country) {
+/** Where the lead came from: page, then form, then any campaign tags, the
+ * button that opened the form (when it was not a direct visit) and the lead's
+ * short reference, which the browser also receives as `lead_id`. */
+export function leadSource(f, country, leadRef = '') {
   const page = country ? `${country} Landing Page` : 'Tutee Connect Website';
   const where = f.form_location || f.from_name;
   return [page, where].filter(Boolean).join(' – ')
-    + (f.utm.length ? ` (${f.utm.join(' / ')})` : '');
+    + (f.utm.length ? ` (${f.utm.join(' / ')})` : '')
+    + (f.cta_source && f.cta_source !== 'direct' ? ` · via ${f.cta_source}` : '')
+    + (leadRef ? ` · ref ${leadRef}` : '');
 }
 
 /** Mirror of the client-side rules. The browser check is for UX; this one is the
@@ -224,7 +234,7 @@ function esc(text) {
 }
 
 /** The Resend request body. Returns a plain object, ready to be JSON-encoded. */
-export function buildEmail(f, country) {
+export function buildEmail(f, country, leadRef = '') {
   const subject = country
     ? `New Enquiry – ${country} Landing Page`
     : 'New Enquiry – Tutee Connect Landing Page';
@@ -238,7 +248,11 @@ export function buildEmail(f, country) {
   if (f.state) rows.push(['State', f.state]);
   if (f.shortlist) rows.push(['Shortlisted Universities', f.shortlist]);
   if (courseLine(f)) rows.push(['Course', courseLine(f)]);
-  rows.push(['Lead Source', leadSource(f, country)]);
+  if (f.qualification) rows.push(['Highest Qualification', f.qualification]);
+  if (f.english_test) rows.push(['English Test', f.english_test]);
+  rows.push(['Lead Source', leadSource(f, country, leadRef)]);
+  if (f.cta_source) rows.push(['CTA Source', f.cta_source]);
+  if (leadRef) rows.push(['Lead Ref', leadRef]);
   if (f.call_time) rows.push(['Preferred Call Time', f.call_time]);
   if (country) rows.push(['Landing Page', country]);
   if (f.page) rows.push(['Submitted From', country ? `${country} Landing Page` : f.page]);
@@ -319,7 +333,7 @@ async function sendViaResend(payload) {
 /** Write the lead to Postgres. Supabase is the system of record, so this runs
  * before the email: if the send later fails, the enquiry still exists and the
  * dashboard shows it. Returns the row id, or null when Supabase is unconfigured. */
-async function storeInSupabase(f, country) {
+async function storeInSupabase(f, country, leadRef) {
   const url = (process.env.SUPABASE_URL || '').trim().replace(/\/+$/, '');
   const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
   if (!url || !key) return null;                  // not configured yet — email only
@@ -332,7 +346,11 @@ async function storeInSupabase(f, country) {
     destination: f.destination,
     source: f.from_name,
     page: f.page || null,
-    extras: Object.fromEntries(f.extras),
+    // the optional qualifiers and the lead reference have no columns of their own
+    extras: Object.fromEntries(f.extras.concat([
+      ['cta_source', f.cta_source], ['qualification', f.qualification],
+      ['english_test', f.english_test], ['lead_ref', leadRef],
+    ].filter(([, v]) => v))),
   };
 
   const res = await postJson(`${url}/rest/v1/leads`,
@@ -354,7 +372,7 @@ async function storeInSupabase(f, country) {
  * sends the formatted email. Returns { saved, mailed }, or null when the
  * script is not configured. Apps Script answers a POST with a redirect to
  * its output; fetch follows it, so the JSON below is the script's reply. */
-async function sendToAppsScript(f, country) {
+async function sendToAppsScript(f, country, leadRef) {
   const url = (process.env.APPS_SCRIPT_URL || '').trim();
   const token = (process.env.APPS_SCRIPT_TOKEN || '').trim();
   if (!url || !token) return null;
@@ -368,7 +386,7 @@ async function sendToAppsScript(f, country) {
     state: f.state,
     shortlist: f.shortlist,
     course: courseLine(f),
-    lead_source: leadSource(f, country),
+    lead_source: leadSource(f, country, leadRef),
     call_time: f.call_time,
     destination: f.destination,
     page: country ? `${country} Landing Page` : f.page,
@@ -395,12 +413,15 @@ export async function handle(rawBody, headers = {}) {
 
   const host = headers['x-forwarded-host'] || headers['host'] || '';
   const country = resolveCountry(fields.destination, host);
+  // Short reference for this lead: in the sheet's Lead Source, the email and the
+  // browser's analytics event, so the three can be matched up.
+  const leadRef = crypto.randomUUID().slice(0, 8);
 
   // 1. system of record first, so a lead survives an email outage
   let leadId = null;
   let stored = false;
   try {
-    leadId = await storeInSupabase(fields, country);
+    leadId = await storeInSupabase(fields, country, leadRef);
     stored = leadId !== null;
   } catch (exc) {
     console.error(`enquiry: supabase insert failed: ${exc.message}`);
@@ -409,7 +430,7 @@ export async function handle(rawBody, headers = {}) {
   // 2. the Website Leads sheet, plus its email to the business inbox
   let sheet = null;
   try {
-    sheet = await sendToAppsScript(fields, country);
+    sheet = await sendToAppsScript(fields, country, leadRef);
     if (sheet) stored = true;
   } catch (exc) {
     console.error(`enquiry: apps script failed: ${exc.message}`);
@@ -420,7 +441,7 @@ export async function handle(rawBody, headers = {}) {
   let emailed = Boolean(sheet && sheet.mailed);
   if (!emailed) {
     try {
-      messageId = await sendViaResend(buildEmail(fields, country));
+      messageId = await sendViaResend(buildEmail(fields, country, leadRef));
       emailed = true;
     } catch (exc) {
       console.error(`enquiry: send refused: ${exc.message}`);
@@ -447,13 +468,15 @@ export async function handle(rawBody, headers = {}) {
   }
 
   console.log(`enquiry: country=${country || '-'} destination=${fields.destination} `
-    + `stored=${stored ? (leadId ?? 'sheet') : 'no'} sheet=${sheet ? 'yes' : 'no'} `
+    + `ref=${leadRef} stored=${stored ? (leadId ?? 'sheet') : 'no'} sheet=${sheet ? 'yes' : 'no'} `
     + `emailed=${emailed ? (messageId || 'yes') : 'no'}`);
 
-  return { status: 200, payload: { success: true, message: OK_MESSAGE } };
+  return { status: 200, payload: { success: true, message: OK_MESSAGE, lead_id: leadRef } };
 }
 
-/** What the GET probe reports: whether config is present, never what it is. */
+/** Configuration summary (recipient, which channels are set up). Kept for local
+ * diagnostics only: the public GET probe no longer returns it, so the recipient
+ * address and the delivery setup are not exposed to anyone who asks. */
 export function health() {
   return {
     success: true,
@@ -483,7 +506,8 @@ function json(status, payload) {
 
 /** Netlify Functions v2 entry point. */
 export default async function (req) {
-  if (req.method === 'GET') return json(200, health());
+  // Public probe: proves the endpoint is up and nothing more.
+  if (req.method === 'GET') return json(200, { success: true, endpoint: 'enquiry' });
 
   if (req.method !== 'POST') {
     return json(405, { success: false, message: 'Method not allowed.' });

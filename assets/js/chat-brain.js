@@ -27,7 +27,8 @@
 (function () {
   'use strict';
 
-  var HERE = /universities\.html$/.test(location.pathname) ? 'universities' : 'home';
+  // The live site serves the directory at /universities (Netlify pretty URLs) as well as /universities.html.
+  var HERE = /\/universities(\.html)?\/?$/.test(location.pathname) ? 'universities' : 'home';
   var OTHER_URL = HERE === 'home' ? './universities.html' : './index.html';
 
   /* ------------------------------------------------------------------ *
@@ -176,7 +177,9 @@
 
   // Elements whose text is not content worth answering from.
   var SKIP = 'script, style, svg, nav, header, .drawer, .rail, .dock, [data-chat], .chat, .sheet, .modal, .progress, ' +
-    '[aria-hidden="true"], form, .skip, .band--news, .newsban, .deck__ui, .tray';
+    '[aria-hidden="true"], form, .skip, .band--news, .newsban, .deck__ui, .tray, ' +
+    // the directory's plain-text list (fetched with universities.html): its data file is indexed instead
+    '.ustatic';
 
   function fromDocument(doc, page) {
     var root = doc.querySelector('main') || doc.body;
@@ -410,10 +413,17 @@
   var CONTACT_Q = /\b(phone|(your|phone|contact|whats ?app|mobile) number|whats ?app|e-?mail|email address|contact (you|details|info|number)|how (can|do) i (contact|reach)|your (office|offices|address|website|location)|where (is|are) (your|the) (office|offices)|where are you (based|located)|website)\b/i;
 
   function contactAnswer() {
-    var tel = document.querySelector('a[href^="tel:"]'), mail = document.querySelector('a[href^="mailto:"]');
+    var mail = document.querySelector('a[href^="mailto:"]');
     var web = [].slice.call(document.querySelectorAll('a[href*="tuteeconnect.com"]')).filter(function (a) { return /^www\./i.test(a.textContent.trim()); })[0];
-    var bits = [];
-    if (tel) bits.push('Phone and WhatsApp: **' + clean(tel.textContent) + '**');
+    // one line per phone number (India first, which is also the WhatsApp number, then the Dubai office)
+    var seen = {}, bits = [];
+    [].slice.call(document.querySelectorAll('a[href^="tel:"]')).forEach(function (t) {
+      var href = t.getAttribute('href');
+      if (seen[href]) return;
+      seen[href] = 1;
+      var num = clean(t.textContent).replace(/\s*\(.*\)$/, '');
+      bits.push(/^tel:\+971/.test(href) ? 'Phone (Dubai office): **' + num + '**' : 'Phone and WhatsApp (India): **' + num + '**');
+    });
     if (mail) bits.push('Email: **' + clean(mail.textContent) + '**');
     if (web) bits.push('Website: **' + clean(web.textContent) + '**');
     var text = 'You can reach Tutee Connect here:\n' + bits.join('\n') + (contact.offices ? '\n\nOur offices: ' + contact.offices.replace(/^Offices:?\s*/i, '') : '');

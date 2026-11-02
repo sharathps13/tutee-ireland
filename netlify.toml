@@ -24,26 +24,96 @@
 # Deep links such as /universities.html are real files, so no SPA catch-all is
 # wanted here — a bad URL should 404 rather than silently render the home page.
 
+# Repository files that are not part of the site. Netlify publishes the whole
+# folder, so without these they would be downloadable. Each answers with the
+# site's 404 page instead. /.netlify/* (the functions) is a different path and
+# is not affected; /assets/*, /api/* and the pages are never matched here.
+[[redirects]]
+  from = "/README.md"
+  to = "/404.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/serve.py"
+  to = "/404.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/Start%20Local%20Server.command"
+  to = "/404.html"
+  status = 404
+  force = true
+
+# The same file as typed with a plain space, in case it is matched before decoding.
+[[redirects]]
+  from = "/Start Local Server.command"
+  to = "/404.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/netlify.toml"
+  to = "/404.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/apps-script/*"
+  to = "/404.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/netlify/*"
+  to = "/404.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/.claude/*"
+  to = "/404.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/.gitignore"
+  to = "/404.html"
+  status = 404
+  force = true
+
+# The generator that writes the static content blocks into the pages.
+[[redirects]]
+  from = "/scripts/*"
+  to = "/404.html"
+  status = 404
+  force = true
+
 # ----------------------------------------------------------------- headers
 [[headers]]
   for = "/*"
   [headers.values]
-    # Scripts are all same-origin, so script-src stays strict with no
-    # 'unsafe-inline'. Third-party assets: the Bricolage Grotesque and Caveat
-    # fonts from Google Fonts, photographs from Unsplash's CDN, country
-    # flags from flagcdn.com. Nothing but this site and Supabase is fetched
-    # from script (connect-src). style-src keeps
+    # Scripts are same-origin, plus Google's gtag loader from
+    # www.googletagmanager.com, which assets/js/analytics.js adds only once
+    # GA_ID is set and the visitor has accepted analytics; script-src stays
+    # strict with no 'unsafe-inline'. Third-party assets: the Bricolage
+    # Grotesque and Caveat fonts from Google Fonts, photographs from Unsplash's
+    # CDN, country flags from flagcdn.com. Script fetches go only to this site,
+    # Supabase and Google Analytics' collection endpoints (connect-src); the
+    # GA hosts are also listed in img-src for its pixel fallback, although
+    # https: already covers them. style-src keeps
     # 'unsafe-inline' for the inline style="" custom properties that drive the
     # animation stagger and parallax. img-src allows any https image: the news
     # banner shows each story's own picture from its publisher, and those hosts
     # can't be listed in advance (images can't run code, so the risk is small).
     Content-Security-Policy = """
       default-src 'self'; \
-      script-src 'self'; \
+      script-src 'self' https://www.googletagmanager.com; \
       style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
-      img-src 'self' data: https:; \
+      img-src 'self' data: https: https://*.google-analytics.com https://www.googletagmanager.com; \
       font-src 'self' https://fonts.gstatic.com; \
-      connect-src 'self' https://*.supabase.co; \
+      connect-src 'self' https://*.supabase.co https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com; \
       form-action 'self'; \
       base-uri 'self'; \
       object-src 'none'; \

@@ -18,6 +18,34 @@
   }
   function icon(id) { return '<svg aria-hidden="true"><use href="#' + id + '"/></svg>'; }
 
+  /* Analytics events go through assets/js/analytics.js (GA4 behind a consent
+     banner, off until its GA_ID is set), which adds the country and itself
+     fires page_view, form_start, whatsapp_click, phone_click and
+     directory_view. They never carry names, emails, phone numbers or free text. */
+  function track(event, params) {
+    try { if (window.tcTrack) window.tcTrack(event, params || {}); } catch (err) { /* tracking must never break the page */ }
+  }
+
+  /* The directory has no form, so analytics.js cannot fill in cta_source there:
+     the button that sent the visitor to the boarding pass is carried over to
+     the home page for this tab only, and set on its form when it loads. */
+  function initCtaCarry() {
+    var KEY = 'tcCtaCarry';
+    if (isHome()) {
+      try {
+        var v = sessionStorage.getItem(KEY);
+        if (v) { sessionStorage.removeItem(KEY); if (window.tcSetCta) window.tcSetCta(v); }
+      } catch (e) { /* storage off */ }
+      return;
+    }
+    document.addEventListener('click', function (e) {
+      var el = e.target.closest && e.target.closest('[data-cta], a[href$="#contact"]');
+      if (!el) return;
+      var label = el.getAttribute('data-cta') || 'directory:' + String(el.textContent || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
+      try { sessionStorage.setItem(KEY, label); } catch (err) { /* storage off */ }
+    }, true);
+  }
+
   /* ------------------------------------------------------------------ *
    * Navigation helpers
    * ------------------------------------------------------------------ */
@@ -26,12 +54,12 @@
   function goToSection(id) {
     if (id === 'top') {
       if (isHome()) window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
-      else window.location.href = './index.html';
+      else window.location.href = '/';
       return;
     }
     var t = document.getElementById(id);
     if (t) { t.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' }); return; }
-    window.location.href = './index.html#' + id;
+    window.location.href = '/#' + id;
   }
 
   function initScrollLinks() {
@@ -260,6 +288,23 @@
   /* ------------------------------------------------------------------ *
    * Hero: scroll parallax + the swipeable polaroid deck
    * ------------------------------------------------------------------ */
+  // The living hero photo (WebGL, hero-fx.js) is not needed for the first paint:
+  // the still photo is already there. Its script is fetched only once the page
+  // has loaded and the browser is idle, and not at all with reduced motion,
+  // data saver or a 2G connection (hero-fx.js checks the first two again itself).
+  function loadHeroFx() {
+    var conn = navigator.connection || {};
+    if (!$('[data-hero-fx]') || reduceMotion || conn.saveData || /2g$/.test(conn.effectiveType || '')) return;
+    function go() {
+      var s = document.createElement('script');
+      s.src = './assets/js/hero-fx.js';
+      s.async = true;
+      document.body.appendChild(s);
+    }
+    function idle() { if ('requestIdleCallback' in window) requestIdleCallback(go, { timeout: 3000 }); else setTimeout(go, 500); }
+    if (document.readyState === 'complete') idle(); else window.addEventListener('load', idle, { once: true });
+  }
+
   function initHero() {
     var hero = $('[data-hero]');
     if (!hero) return;
@@ -870,6 +915,9 @@
     var sIcon = $('[data-sheet-icon]'), sTitle = $('[data-sheet-title]'), sTag = $('[data-sheet-tag]');
     var sBody = $('[data-sheet-body]'), sStep = $('[data-sheet-step]');
     var sIdx = 0, lastFocus = null;
+    // The descriptions are already in the page (written by scripts/build-static.mjs
+    // from services-data.js); the sheet shows one at a time.
+    var copies = $$('[data-svc-copy]', sBody);
     function renderSheet(dir) {
       var s = services[sIdx];
       function fill() {
@@ -877,7 +925,8 @@
         sTitle.textContent = s.title;
         sTag.textContent = s.tagline;
         sStep.textContent = 'Service ' + (sIdx + 1) + ' of ' + services.length;
-        sBody.innerHTML = paragraphs(s.desc);
+        if (copies.length === services.length) copies.forEach(function (c, i) { c.hidden = i !== sIdx; });
+        else sBody.innerHTML = paragraphs(s.desc);
         sBody.scrollTop = 0;
       }
       if (dir && !reduceMotion) {
@@ -1025,6 +1074,8 @@
    * Settlement route: draws on scroll; each stop opens its details and
    * the traveller pin flies along the line to it
    * ------------------------------------------------------------------ */
+  // The source for the route's details: scripts/build-static.mjs copies them into
+  // index.html, and the chat answers from them. Re-run that script after an edit.
   var STOPS = [
     {
       tag: 'Stop 1: Stamp 2', title: 'Irish Student Visa',
@@ -1129,16 +1180,11 @@
       })(performance.now());
     }
 
-    var sd = function (k) { return $('[data-sd="' + k + '"]', detail); };
+    // Each stop's details are already in the page, one pane per stop (written by
+    // scripts/build-static.mjs from STOPS above); picking a stop shows its panes.
+    var panes = $$('[data-sd-pane]', detail);
     function fill(i) {
-      var s = STOPS[i];
-      sd('tag').textContent = s.tag;
-      sd('title').textContent = s.title;
-      sd('what').textContent = s.what;
-      sd('facts').innerHTML = s.facts.map(function (f) {
-        return '<div class="sd-fact"><span>' + esc(f[0]) + '</span><b>' + esc(f[1]) + '</b></div>';
-      }).join('');
-      sd('help').innerHTML = s.help.map(function (h) { return '<li>' + icon('i-check-c') + '<span>' + esc(h) + '</span></li>'; }).join('');
+      panes.forEach(function (p) { p.hidden = +p.getAttribute('data-sd-pane') !== i; });
     }
     var phone = window.matchMedia('(max-width: 640px)');
     function placeDetail(i) {
@@ -1156,7 +1202,8 @@
       if (animate && !mobile.matches) { measure(); if (lens.length) flyTo(lens[i]); }
       if (animate && !reduceMotion) {
         detail.classList.add('is-swapping');
-        setTimeout(function () { fill(i); detail.classList.remove('is-swapping'); }, 220);
+        // the new pane appears while still faded, so removing the class fades it in
+        setTimeout(function () { fill(i); void detail.offsetWidth; detail.classList.remove('is-swapping'); }, 220);
       } else fill(i);
     }
     stops.forEach(function (s, i) {
@@ -1208,13 +1255,25 @@
     var count = $('[data-answer-count]');
     var current = 0, timer = null;
 
+    // Each word fades in on its own; source links in an answer stay links around their words.
+    function wordSpans(node, k) {
+      var html = '';
+      [].forEach.call(node.childNodes, function (n) {
+        if (n.nodeType === 3) {
+          html += esc(n.nodeValue.replace(/\s+/g, ' ')).replace(/\S+/g, function (w) { return '<span class="wd" style="--i:' + (k.n++) + '">' + w + '</span>'; });
+        } else if (n.nodeType === 1 && n.tagName === 'A') {
+          html += '<a href="' + esc(n.getAttribute('href')) + '" target="_blank" rel="noopener">' + wordSpans(n, k) + '</a>';
+        } else if (n.nodeType === 1) html += wordSpans(n, k);
+      });
+      return html;
+    }
     function fill(i) {
       var b = btns[i];
       var ico = $('i svg', b);
-      var a = $('.qa__a', b.parentNode).textContent.trim();
+      var a = $('.qa__a', b.parentNode);
       body.innerHTML = '<div class="answer__icon">' + (ico ? ico.outerHTML : '') + '</div>' +
         '<h3>' + esc(b.textContent.trim()) + '</h3>' +
-        '<p>' + a.split(/\s+/).map(function (w, k) { return '<span class="wd" style="--i:' + k + '">' + esc(w) + '</span>'; }).join(' ') + '</p>';
+        '<p>' + wordSpans(a, { n: 0 }).trim() + '</p>';
       if (count) count.textContent = (i < 9 ? '0' : '') + (i + 1) + ' / ' + (btns.length < 10 ? '0' : '') + btns.length;
     }
     var phone = window.matchMedia('(max-width: 640px)');
@@ -1393,6 +1452,7 @@
       var before = list;
       list = clean(next);
       try { if (list.length) localStorage.setItem(KEY, JSON.stringify(list)); else localStorage.removeItem(KEY); } catch (e) { /* storage off: this page still works */ }
+      list.forEach(function (n) { if (before.indexOf(n) < 0) track('shortlist_add', { count: list.length, item_name: n }); });
       emit(before);
     }
     window.addEventListener('storage', function (e) {
@@ -1576,6 +1636,7 @@
         return;
       }
       if (!level()) { levelError(true); $('input[name="study_level"]', form).focus(); return; }
+      if (step === 1) track('form_step_2', { form_location: ($('input[name="form_location"]', form) || {}).value || '' });
       go(2);
       enterStep(2);
     }
@@ -1961,7 +2022,7 @@
       function checkState(final) {
         if (!st) return true;
         if (st.value) setFieldState(st, 'ok');
-        else if (final) setFieldState(st, 'bad', 'Choose the state you are from.');
+        else if (final) setFieldState(st, 'bad', 'Choose where you live.');
         return !!st.value;
       }
       function checkPhone(final) {
@@ -1984,7 +2045,19 @@
       if (ph) { ph.addEventListener('blur', function () { if (ph.value.trim()) checkPhone(true); }); ph.addEventListener('input', function () { checkPhone(false); }); }
       if (em) { em.addEventListener('blur', function () { if (em.value.trim()) checkEmail(true); }); em.addEventListener('input', function () { checkEmail(false); }); }
       if (cc) cc.addEventListener('change', function () { showHint(cc); if (ph && ph.value.trim()) checkPhone(true); });
+      // A +971 number (picked, or pre-set from the time zone) moves the emirates to the top
+      // of "Where do you live?". Nothing is pre-selected: one time zone covers every emirate.
+      var uaeGroup = st && $('[data-uae-group]', st), indiaGroup = st && $('optgroup[label="India"]', st);
+      function emiratesFirst() {
+        if (!uaeGroup || !indiaGroup || !cc) return;
+        if (cc.value === '+971') { if (uaeGroup.nextElementSibling !== indiaGroup) st.insertBefore(uaeGroup, indiaGroup); }
+        else if (indiaGroup.nextElementSibling !== uaeGroup) st.insertBefore(uaeGroup, indiaGroup.nextSibling);
+      }
+      if (cc) cc.addEventListener('change', emiratesFirst);
+      form.addEventListener('reset', function () { setTimeout(emiratesFirst, 0); });
+      emiratesFirst();
       form.addEventListener('reset', function () { [nm, st, ph, em].forEach(function (i) { if (i) setFieldState(i, null); }); });
+      // form_start is fired by analytics.js on the first touch of any form with an email field.
       // Submit checks every field in page order; returns the first bad one.
       checks.push({ form: form, firstBad: function () {
         return [[nm, checkName], [em, checkEmail], [ph, checkPhone], [st, checkState]].filter(function (c) {
@@ -2041,6 +2114,8 @@
           .then(function (r) { return r.json().catch(function () { return { success: false }; }); })
           .then(function (res) {
             if (res && res.success) {
+              // only once the server has the lead; lead_id is its short reference in the sheet
+              track('generate_lead', { form_location: data.form_location || '', lead_id: res.lead_id || '' });
               var d = { name: data.name, call_time: data.call_time || '', at: Date.now() };
               try { localStorage.setItem(LEAD_DONE_KEY, JSON.stringify(d)); } catch (err) { /* storage off */ }
               form.reset();
@@ -2160,7 +2235,7 @@
     out.push({
       title: 'How many hours can I work while studying? Part-time work hours on a student visa',
       text: 'On a Stamp 2 student permission you can work part-time for up to ' + WEEK_MODES.term.total + ' ' + WEEK_MODES.term.note +
-        ', and up to ' + WEEK_MODES.hol.total + ' ' + WEEK_MODES.hol.note + '. We help you find permitted part-time work from day one, and our students typically land part-time roles within their first 30 days in Ireland.',
+        ', and up to ' + WEEK_MODES.hol.total + ' ' + WEEK_MODES.hol.note + '. We help you look for permitted part-time work from day one.',
       sec: { id: 'funding', name: 'Funding: Earn while you learn', page: 'home' }, kind: 'faq'
     });
     return out;
@@ -2212,12 +2287,12 @@
       var onHome = isHome();
       if (sec.page === 'universities') {
         // The directory always opens in its own tab, so the home page (and a half-filled form) stays put.
-        if (onHome) { var w = window.open('./universities.html', '_blank'); if (w) w.opener = null; else window.location.href = './universities.html'; }
+        if (onHome) { var w = window.open('/universities', '_blank'); if (w) w.opener = null; else window.location.href = '/universities'; }
         else { close(); window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' }); }
         return;
       }
       if (onHome) { close(); setTimeout(function () { goToSection(sec.id || 'top'); }, 200); }
-      else window.location.href = './index.html' + (sec.id ? '#' + sec.id : '');
+      else window.location.href = '/' + (sec.id ? '#' + sec.id : '');
     }
     function push(role, content, before, actions, restoring) {
       var me = role === 'user';
@@ -2298,7 +2373,7 @@
         body: JSON.stringify({
           subject: 'New Lead from Chatbot!', from_name: 'Tutee AI Counsellor',
           name: lead.name, phone: lead.phone, email: lead.email,
-          destination: 'Chatbot General Inquiry', form_location: 'Tutee AI chat', page: enquiryPage()
+          destination: 'Chatbot General Inquiry', form_location: 'Tutee AI chat', cta_source: 'tutee-ai-chat', page: enquiryPage()
         })
       }).then(function (r) { clearTimeout(t); return r.json().catch(function () { return { success: false }; }); },
         function (err) { clearTimeout(t); throw err; });
@@ -2322,6 +2397,7 @@
         if (!LEAD_EMAIL_RE.test(q)) return "That doesn't look like a valid email address. Could you check it, or type *cancel*?";
         lead.email = q.slice(0, 200); stage = 'idle';
         return submitLead().then(function (res) {
+          if (res && res.success) track('chat_lead', { lead_id: res.lead_id || '' });
           return res && res.success
             ? '✅ **Done!** A counsellor will contact you within one working day.\n\nAnything else I can help with in the meantime?'
             : { text: "Sorry, that didn't go through. Please use the free counselling form or reach us directly:", actions: advisorActions() };
@@ -2872,7 +2948,7 @@
       });
       $('[data-cmp-book]', cmpBox).addEventListener('click', function () {
         us.forEach(function (u) { shortlist.add(u.name); });
-        window.location.href = './index.html#contact';
+        window.location.href = '/#contact';
       });
     }
     function openCompare() {
@@ -3001,7 +3077,7 @@
     }
     // Shortlist -> the free counselling boarding pass on the home page
     $$('[data-tray-apply]').forEach(function (b) {
-      b.addEventListener('click', function () { window.location.href = './index.html#contact'; });   // the shortlist is already saved
+      b.addEventListener('click', function () { window.location.href = '/#contact'; });   // the shortlist is already saved
     });
     $$('[data-modal-close]').forEach(function (b) { b.addEventListener('click', closeModal); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeModal(); });
@@ -3018,12 +3094,14 @@
    * Boot
    * ------------------------------------------------------------------ */
   window.TC_READY = true;
+  initCtaCarry();
   initReveal();
   initDrawer();
   initScrollLinks();
   initHeaderScroll();
   initProgress();
   initHero();
+  loadHeroFx();
   initMagnetic();
   initPanels();
   initOffscreen();
