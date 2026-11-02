@@ -9,6 +9,9 @@
  *   - Consent Mode v2 defaults are all "denied"; accepting grants analytics only
  *     (ad_storage stays denied: no ad tags are run from here)
  *   - the choice is remembered in localStorage ("tc_consent")
+ *   - an "Analytics settings" link is added to the footer (any element with
+ *     data-consent-settings works too) so the visitor can change their mind;
+ *     withdrawing consent stops collection and clears the _ga cookies
  *
  * Load with:  <script src="./assets/js/analytics.js" data-country="Finland"
  *               data-form-section="contact" defer></script>
@@ -70,7 +73,61 @@
     gtagReady = true;
   }
 
-  function banner() {
+  /** Withdraw consent: GA stops collecting and its cookies are removed. */
+  function revokeGA() {
+    if (gtagReady) gtag('consent', 'update', { analytics_storage: 'denied' });
+    var host = location.hostname.split('.').slice(-2).join('.');
+    document.cookie.split(';').forEach(function (c) {
+      var name = c.split('=')[0].trim();
+      if (!/^_ga/.test(name)) return;
+      ['', '; domain=' + location.hostname, '; domain=.' + host].forEach(function (d) {
+        document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/' + d;
+      });
+    });
+  }
+
+  var styled = false;
+  function banner(focus) {
+    if (document.querySelector('.tc-consent')) return;
+    if (!styled) { styled = true; addStyles(); }
+    var box = document.createElement('div');
+    box.className = 'tc-consent';
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-label', 'Analytics consent');
+    box.innerHTML =
+      '<p>May we use Google Analytics to see which parts of this page help students? ' +
+      'It never receives your name, email or phone number. You can change this later from ' +
+      '"Analytics settings" at the bottom of the page. ' +
+      '<a href="' + PRIVACY_URL + '" target="_blank" rel="noopener">Privacy policy</a></p>' +
+      '<div class="tc-consent__row"><button type="button" data-no>No thanks</button>' +
+      '<button type="button" data-yes>Allow analytics</button></div>';
+    box.addEventListener('click', function (e) {
+      var yes = e.target.closest('[data-yes]');
+      if (!yes && !e.target.closest('[data-no]')) return;
+      store(yes ? 'granted' : 'denied');
+      box.remove();
+      if (yes) {
+        if (gtagReady) gtag('consent', 'update', { analytics_storage: 'granted' });
+        else loadGA();
+      } else revokeGA();
+    });
+    document.body.appendChild(box);
+    if (focus) box.querySelector('[data-no]').focus({ preventScroll: true });
+  }
+
+  /** A quiet footer link that reopens the banner, so consent can be changed. */
+  function settingsLink() {
+    var foot = document.querySelector('footer');
+    if (!foot || foot.querySelector('[data-consent-settings]')) return;
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'tc-consent-settings';
+    b.setAttribute('data-consent-settings', '');
+    b.textContent = 'Analytics settings';
+    foot.appendChild(b);
+  }
+
+  function addStyles() {
     var css = document.createElement('style');
     css.textContent =
       '.tc-consent{position:fixed;left:16px;right:16px;bottom:16px;z-index:2147483000;max-width:520px;' +
@@ -80,29 +137,19 @@
       '.tc-consent__row{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}' +
       '.tc-consent button{font:inherit;font-weight:700;border-radius:999px;padding:9px 18px;cursor:pointer;' +
       'border:1.5px solid #14213d;background:#fff;color:#14213d}' +
-      '.tc-consent button[data-yes]{background:#14213d;color:#fff}';
+      '.tc-consent button[data-yes]{background:#14213d;color:#fff}' +
+      '.tc-consent-settings{display:block;margin:12px auto 0;padding:6px 10px;background:none;border:0;' +
+      'font:inherit;font-size:12px;color:inherit;opacity:.75;text-decoration:underline;cursor:pointer}';
     document.head.appendChild(css);
-    var box = document.createElement('div');
-    box.className = 'tc-consent';
-    box.setAttribute('role', 'dialog');
-    box.setAttribute('aria-label', 'Analytics consent');
-    box.innerHTML =
-      '<p>May we use Google Analytics to see which parts of this page help students? ' +
-      'It never receives your name, email or phone number. ' +
-      '<a href="' + PRIVACY_URL + '" target="_blank" rel="noopener">Privacy policy</a></p>' +
-      '<div class="tc-consent__row"><button type="button" data-no>No thanks</button>' +
-      '<button type="button" data-yes>Allow analytics</button></div>';
-    box.addEventListener('click', function (e) {
-      var yes = e.target.closest('[data-yes]');
-      if (!yes && !e.target.closest('[data-no]')) return;
-      store(yes ? 'granted' : 'denied');
-      box.remove();
-      if (yes) loadGA();
-    });
-    document.body.appendChild(box);
   }
 
   if (GA_ID) {
+    // Any data-consent-settings control (the footer link, or one a page adds) reopens the choice.
+    document.addEventListener('click', function (e) {
+      if (e.target.closest && e.target.closest('[data-consent-settings]')) banner(true);
+    });
+    var whenReady = function (fn) { if (document.body) fn(); else document.addEventListener('DOMContentLoaded', fn); };
+    whenReady(function () { if (!styled) { styled = true; addStyles(); } settingsLink(); });
     var choice = store();
     if (choice === 'granted') loadGA();
     else if (choice !== 'denied') {
