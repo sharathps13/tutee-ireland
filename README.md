@@ -209,3 +209,31 @@ broken while automating a browser, check `document.visibilityState` before belie
 There's no build step. Deploy the folder as-is to Netlify — `index.html` at the root. Leads need the
 Netlify function and its environment variables; see `apps-script/README.md`. `serve.py`, `Start Local Server.command` and `README.md`
 are development-only and can be left out of the upload.
+
+## Placeholder testimonials
+
+The student testimonials on this page are illustrative placeholders written during
+development, not real reviews. They carry an "Illustrative examples" label and the
+`data-placeholder-content` attribute (on the section and on the menu links to it).
+`assets/js/placeholders.js` hides everything with that attribute on the live
+`*tutee.netlify.app` host, so the placeholders show only on localhost and deploy previews.
+
+To publish genuine testimonials:
+
+1. Get each student's written permission to publish their words, first name, course and year.
+2. Replace the placeholder cards with those quotes. Do not edit what a student wrote.
+3. Delete the `.tc-illustrative` label and remove `data-placeholder-content` from the
+   section and its menu links.
+4. Do not add `Review` or `AggregateRating` structured data for your own testimonials.
+
+## Analytics (off until configured)
+
+`assets/js/analytics.js` loads GA4 only after the visitor accepts the consent banner, and
+only once `GA_ID` is set. Before switching it on:
+
+1. Create one GA4 property for all six sites and paste its measurement ID into `GA_ID`
+   (the same file on every site; `data-country` tells the destinations apart).
+2. Allow `https://www.googletagmanager.com` in `script-src` and
+   `https://*.google-analytics.com https://*.analytics.google.com` in `connect-src` in `netlify.toml`.
+3. Update the privacy policy to name Google Analytics, what it collects and how to withdraw consent.
+4. Check in GA4 DebugView that `generate_lead` fires once per successful enquiry and never on a failed one.
