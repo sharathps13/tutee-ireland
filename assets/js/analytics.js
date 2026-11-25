@@ -37,6 +37,7 @@
 
   window.dataLayer = window.dataLayer || [];
   var gtagReady = false;
+  var allowed = false;   // this visit's choice; events reach gtag only while it is true
 
   function gtag() { window.dataLayer.push(arguments); }
 
@@ -52,13 +53,16 @@
   function track(name, params) {
     var p = { country: COUNTRY };
     for (var k in params) if (Object.prototype.hasOwnProperty.call(params, k)) p[k] = params[k];
-    if (gtagReady) gtag('event', name, p);
+    // once gtag has loaded, an event is passed to it only while consent stands: after
+    // "No thanks" nothing more is queued for Google (Phase 6, 12 Nov 2026)
+    if (gtagReady) { if (allowed) gtag('event', name, p); }
     else window.dataLayer.push(Object.assign({ event: name }, p));
   }
   window.tcTrack = track;
 
   function loadGA() {
     if (gtagReady || !GA_ID) return;
+    allowed = true;
     gtag('consent', 'default', {
       ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied',
       analytics_storage: 'denied', wait_for_update: 500
@@ -75,6 +79,7 @@
 
   /** Withdraw consent: GA stops collecting and its cookies are removed. */
   function revokeGA() {
+    allowed = false;
     if (gtagReady) gtag('consent', 'update', { analytics_storage: 'denied' });
     var host = location.hostname.split('.').slice(-2).join('.');
     document.cookie.split(';').forEach(function (c) {
@@ -107,7 +112,7 @@
       store(yes ? 'granted' : 'denied');
       box.remove();
       if (yes) {
-        if (gtagReady) gtag('consent', 'update', { analytics_storage: 'granted' });
+        if (gtagReady) { allowed = true; gtag('consent', 'update', { analytics_storage: 'granted' }); }
         else loadGA();
       } else revokeGA();
     });

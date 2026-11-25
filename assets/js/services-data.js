@@ -6,54 +6,54 @@ window.IE_SERVICES = [
     title: 'Career consultation',
     tagline: 'Expert guidance for your Irish journey',
     icon: 'i-msg',
-    desc: "Tutee Connect offers a career consultation free of cost. It sharpens your understanding of your own profile and shows the career pathways open to you in Ireland. Our consultants stay with you through every phase of the application, with advice tailored to you.\n\nWe also brief you and your family on Ireland itself: one-year taught Master's degrees, the Third Level Graduate Programme of up to two years, and the clear onward route to a Critical Skills Employment Permit and Stamp 4 residence."
+    desc: "Tutee Connect offers a career consultation free of cost. We review your profile with you, show you and your family the study and career pathways open to you in Ireland, and advise you through every phase of the application."
   },
   {
     title: 'Language test',
     tagline: 'Master IELTS, PTE, TOEFL and Duolingo',
     icon: 'i-lang',
-    desc: "We help every applicant prepare thoroughly for English language tests (IELTS, PTE Academic, TOEFL, Duolingo English Test) and admission tests such as the GMAT where Irish universities require them. Expert-led training and free study materials are included.\n\nYou'll sit several mock tests with our team before the real thing. Through our partner training institutes you can join a full course if needed, and once you're ready we book your official test at a centre your Irish institution accepts."
+    desc: "We prepare you for English language tests (IELTS, PTE Academic, TOEFL, Duolingo English Test) and admission tests such as the GMAT where Irish universities require them, with free study materials and mock tests.\n\nIf you need a full course, you can join one through our partner training institutes. When you're ready, we book your official test at a centre your Irish institution accepts."
   },
   {
     title: 'College selection',
     tagline: "Shortlists from Ireland's official registers",
     icon: 'i-compass',
-    desc: "Based on your interests and academic record, our experts recommend best-fit courses and universities across Leinster, Munster, Connacht and Ulster.\n\nModule structures, credit requirements, placement years and post-graduation prospects are all explained clearly, so you can make the right decision with confidence."
+    desc: "Based on your interests and academic record, our experts recommend best-fit courses and universities across Leinster, Munster, Connacht and Ulster.\n\nWe explain module structures, credit requirements, placement years and post-graduation prospects before you decide."
   },
   {
     title: 'Documentation',
     tagline: 'Statements of purpose that stand out',
     icon: 'i-file',
-    desc: "Clear, complete documents matter at every stage of the university and visa process. We share samples, clear requirements and exact formatting for every key document: Statement of Purpose, academic references and transcripts.\n\nWe review everything several times before you apply, so problems are caught early, and our admission experts help you prepare complete, well-presented files for both your university applications and your visa."
+    desc: "We share samples, clear requirements and exact formatting for every key document: Statement of Purpose, academic references and transcripts.\n\nOur admission experts review everything several times before you apply, so problems are caught early and your university applications are complete and well presented."
   },
   {
     title: 'Study visa',
     tagline: 'Complete, consistent applications',
     icon: 'i-passport',
-    desc: "We provide end-to-end Irish Student Visa support: your Letter of Acceptance, fee payment, private medical insurance and the online AVATS application, step by step through the Immigration Service Delivery criteria.\n\nOur processing team helps you build a clear financial profile and sponsor documents for the proof-of-funds requirement, so your application is complete and consistent. The decision itself rests with Ireland's immigration authorities, and no agent can guarantee it."
+    desc: "We support your Irish Student Visa application step by step, from your Letter of Acceptance and private medical insurance to the online AVATS application.\n\nOur processing team helps you build a clear financial profile and sponsor documents for the proof-of-funds requirement, so your application is complete and consistent. The decision itself rests with Ireland's immigration authorities, and no agent can guarantee it."
   },
   {
     title: 'End-to-end settlement',
     tagline: 'From landing to settlement',
     icon: 'i-route',
-    desc: "Our support goes well beyond the student visa. We map out a long-term pathway for your career in Ireland based on your profile and goals.\n\nWe guide you from your Student Visa to the Third Level Graduate Programme, on to a Critical Skills Employment Permit, and through the route to Stamp 4 residence, so you can build a life in Ireland."
+    desc: "We map out a long-term pathway for your career in Ireland based on your profile and goals, then guide you through each stage: Student Visa, Third Level Graduate Programme, Critical Skills Employment Permit and Stamp 4 residence. Each stage is explained under Settle in Ireland, further down this page."
   },
   {
     title: 'Financial aid',
     tagline: 'Loans and Irish scholarships',
     icon: 'i-landmark',
-    desc: "Worried about proof of funds, tuition and accommodation? We work with partner lenders, from national banks to private lenders, offering both collateral and non-collateral education loans.\n\nBesides tuition, partner loans can also cover accommodation during your course, and we connect you with the lender's team to move your application along. Students with strong academics are guided on applying for merit-based scholarships and bursaries directly from their chosen Irish institutions."
+    desc: "Worried about proof of funds? We help you apply for collateral and non-collateral education loans through partner lenders, from national banks to private lenders, and connect you with the lender's team. Depending on the lender, a loan can cover tuition and accommodation.\n\nStudents with strong academics are guided on applying for merit-based scholarships and bursaries from their chosen Irish institutions."
   },
   {
     title: 'Post-landing',
     tagline: 'Your Irish safety net',
     icon: 'i-landing',
-    desc: "Our post-landing service covers everything you need in your first weeks in a new country.\n\nYour dedicated consultant helps you find secure accommodation, register for your Irish Residence Permit, find a GP and activate your medical insurance, apply for your PPS number, find permitted part-time work, open an Irish bank account and settle every other immediate need."
+    desc: "In your first weeks in Ireland, your dedicated consultant helps you find secure accommodation, register for your Irish Residence Permit, find a GP and activate your medical insurance, apply for your PPS number, find permitted part-time work and open an Irish bank account."
   },
   {
     title: 'Family migration',
     tagline: 'Bring your loved ones, the right way',
     icon: 'i-users',
-    desc: "We help you build a complete life in Ireland, including bringing your family over legally and safely.\n\nIreland does not normally grant dependant permission to students, so we are straight with you about the timeline: family reunification opens up once you hold a Critical Skills Employment Permit, which lets your partner and children join you immediately. We support you through every application along the way."
+    desc: "Ireland does not normally grant dependant permission to students, so we are straight with you about the timeline: family reunification opens up once you hold a Critical Skills Employment Permit. We plan for it from the start and support you through every family application along the way."
   }
 ];

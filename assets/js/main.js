@@ -252,7 +252,8 @@
     var tops = [], darkRanges = [], maxScroll = 1;
     onMeasure(function () {
       maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-      tops = ids.map(function (id) { var s = document.getElementById(id); return s ? pageTop(s) : Infinity; });
+      // A hidden section (the placeholder stories on the live hosts) has no height and never becomes the active stop
+      tops = ids.map(function (id) { var s = document.getElementById(id); return s && s.offsetHeight ? pageTop(s) : Infinity; });
       darkRanges = darks.map(function (d) { var t = pageTop(d); return [t, t + d.offsetHeight]; });
     });
     onScrollFrame(function (y, vh) {
@@ -544,7 +545,8 @@
     if (!board || !pass) return;
     var rows = $$('.board__row', board);
     var f = function (k) { return $('[data-pass-' + k + ']', pass); };
-    var COLORS = ['var(--shamrock)', 'var(--amber)', 'var(--claret)'];
+    // Phase 14: header colour and its text colour, each pair at least 4.5:1 (white on amber was 2.35:1)
+    var COLORS = ['var(--shamrock-ink)', 'var(--amber)', 'var(--claret)'], TEXT = ['#fff', 'var(--forest)', '#fff'];
     var current = 0;
 
     function fill(row) {
@@ -559,6 +561,7 @@
         return '<span>' + esc(x.trim()) + '</span>';
       }).join('');
       pass.style.setProperty('--pc', COLORS[(+row.getAttribute('data-rank') - 1) % 3]);
+      pass.style.setProperty('--pt', TEXT[(+row.getAttribute('data-rank') - 1) % 3]);
       paintPick(row);
     }
 
@@ -914,7 +917,28 @@
     if (!sheet) return;
     var sIcon = $('[data-sheet-icon]'), sTitle = $('[data-sheet-title]'), sTag = $('[data-sheet-tag]');
     var sBody = $('[data-sheet-body]'), sStep = $('[data-sheet-step]');
+    var sImg = $('[data-sheet-img]', sheet), sCount = $('[data-sheet-count]', sheet);
     var sIdx = 0, lastFocus = null;
+    // Each service's photo in the detail card: its tile's picture, fetched at card size.
+    function photoFor(i) {
+      var img = $('img', tiles[i]);
+      if (!img) return '';
+      return (img.getAttribute('src') || '').replace(/([?&])w=\d+/, '$1w=1100');
+    }
+    function setPhoto(i) {
+      if (!sImg) return;
+      var src = photoFor(i);
+      if (!src) return;
+      sImg.classList.remove('is-loaded');
+      sImg.onload = function () { sImg.classList.add('is-loaded'); };
+      sImg.src = src;
+      if (sImg.complete && sImg.naturalWidth > 1) sImg.classList.add('is-loaded');
+      // warm up the neighbours so prev/next swap without a blank frame
+      [i + 1, i - 1].forEach(function (n) {
+        var u = photoFor((n + services.length) % services.length);
+        if (u) { var pre = new Image(); pre.decoding = 'async'; pre.src = u; }
+      });
+    }
     // The descriptions are already in the page (written by scripts/build-static.mjs
     // from services-data.js); the sheet shows one at a time.
     var copies = $$('[data-svc-copy]', sBody);
@@ -925,6 +949,8 @@
         sTitle.textContent = s.title;
         sTag.textContent = s.tagline;
         sStep.textContent = 'Service ' + (sIdx + 1) + ' of ' + services.length;
+        if (sCount) sCount.textContent = String(sIdx + 1).padStart(2, '0') + ' / ' + String(services.length).padStart(2, '0');
+        setPhoto(sIdx);
         if (copies.length === services.length) copies.forEach(function (c, i) { c.hidden = i !== sIdx; });
         else sBody.innerHTML = paragraphs(s.desc);
         sBody.scrollTop = 0;
@@ -1037,9 +1063,12 @@
       });
       var cur = tabs.filter(function (t) { return t.getAttribute('aria-selected') === 'true'; })[0] || tabs[0];
       moveInk(cur);
-      window.addEventListener('resize', function () {
+      var onSize = function () {
         moveInk(tabs.filter(function (t) { return t.getAttribute('aria-selected') === 'true'; })[0]);
-      });
+      };
+      window.addEventListener('resize', onSize);
+      // the bar also changes size without a window resize (fonts, layout changes)
+      if ('ResizeObserver' in window) new ResizeObserver(onSize).observe(list);
       if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { moveInk(cur); });
     });
   }
@@ -1079,26 +1108,26 @@
   var STOPS = [
     {
       tag: 'Stop 1: Stamp 2', title: 'Irish Student Visa',
-      what: 'Your student permission lets you live and study in Ireland on a programme from the official register. Choose a course at NFQ Level 8 or above and it leads straight into the Graduate Programme.',
+      what: 'Your student permission lets you live and study in Ireland on a programme from the official register. A course at NFQ Level 8 or above can lead into the Graduate Programme.',
       facts: [['How long', 'The length of your course'], ['Work rights', '20 hrs a week in term, 40 in holidays'], ['Must have', 'A course on the official register']],
       help: ['Shortlisting courses and universities that fit your profile', 'Letter of Acceptance, medical insurance and proof of funds', 'Your AVATS application and residence permit registration']
     },
     {
       tag: 'Stop 2: Stamp 1G', title: 'Third Level Graduate Programme',
-      what: 'Once you graduate, you can stay in Ireland to look for and take up graduate work, with no employer sponsor needed.',
-      facts: [['How long', '12 months at Level 8, up to 24 at Level 9+'], ['Work rights', 'Full-time, no permit needed'], ['Sponsor', 'Not required']],
+      what: 'Once you graduate, you can stay in Ireland to look for and take up graduate work.',
+      facts: [['How long', '12 months at Level 8; up to 24 at Level 9+ (renewal conditions apply)'], ['Work rights', 'Full-time, no permit needed'], ['Sponsor', 'Not required']],
       help: ['CV, LinkedIn and interview preparation', 'A job search aimed at Critical Skills roles', 'Renewal guidance for Master’s and PhD graduates']
     },
     {
       tag: 'Stop 3: Employment permit', title: 'Critical Skills Employment Permit',
-      what: 'Land a job offer in an occupation on Ireland’s Critical Skills list and move onto this permit. It is the fast track to long-term residence, and your family can join you.',
-      facts: [['Permit length', 'Issued for 2 years'], ['Labour market test', 'Not required'], ['Family', 'Partner and children can join immediately']],
+      what: 'Land a job offer in an occupation on Ireland’s Critical Skills list and move onto this permit. It can lead to Stamp 4 (long-term residence) if you meet the conditions.',
+      facts: [['Permit length', 'Issued for 2 years'], ['Labour market test', 'Not required'], ['Family', 'Partner and children can apply to join from the start']],
       help: ['Matching your degree to eligible occupations', 'Permit application support with your employer', 'Family reunification applications and documents']
     },
     {
       tag: 'Stop 4: Long-term residence', title: 'Stamp 4 residence',
-      what: 'After two years on a Critical Skills permit you can apply for Stamp 4, which lets you live and work in Ireland without needing an employment permit.',
-      facts: [['When', 'After 2 years on Critical Skills'], ['Work rights', 'Any job, no permit'], ['Next', 'A long-term life in Ireland']],
+      what: 'Once eligible, you can apply for Stamp 4, which lets you live and work in Ireland without needing an employment permit.',
+      facts: [['When', 'Near the end of your Critical Skills permit, if you qualify'], ['Work rights', 'No employment permit needed on Stamp 4'], ['Next', 'A long-term life in Ireland']],
       help: ['Timing your Stamp 4 application', 'Documents and immigration appointments', 'Planning your long-term residence']
     }
   ];
@@ -1239,6 +1268,46 @@
     window.addEventListener('load', anchor);
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(anchor);
     if ('ResizeObserver' in window) new ResizeObserver(anchor).observe(route);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * FAQ (Phase 13): six questions show first; the other seven wait behind
+   * "More questions (7)". All of them stay in the page and in the JSON-LD.
+   * The button shows them, moves focus to the first one and goes away; a
+   * link to a hidden question or to a topic (#faq-visa) shows them first.
+   * ------------------------------------------------------------------ */
+  function initFaqMore() {
+    var btn = $('[data-faq-more]');
+    var box = btn && btn.closest('.is-short');
+    if (!box) return;
+    var ids = (btn.getAttribute('aria-controls') || '').split(/\s+/).filter(Boolean);
+    function reveal(focus) {
+      if (!box.classList.contains('is-short')) return false;
+      box.classList.remove('is-short');
+      btn.setAttribute('aria-expanded', 'true');
+      btn.hidden = true;
+      ids.forEach(function (id) { var li = document.getElementById(id); if (li) li.classList.add('is-in'); });
+      var first = document.getElementById(ids[0]);
+      var sum = first && $('summary', first);
+      if (focus && sum) sum.focus();
+      return true;
+    }
+    function wanted(id) {
+      var t = id && document.getElementById(id);
+      return !!(t && box.contains(t) && (t.classList.contains('faqgroup') || t.closest('.faq-extra')));
+    }
+    btn.addEventListener('click', function () { reveal(true); });
+    // before the browser jumps, so it lands on the right place
+    document.addEventListener('click', function (e) {
+      var a = e.target.closest && e.target.closest('a[href^="#"]');
+      if (a && wanted(decodeURIComponent(a.getAttribute('href').slice(1)))) reveal(false);
+    }, true);
+    function fromHash() {
+      var id = decodeURIComponent(window.location.hash.slice(1));
+      if (wanted(id) && reveal(false)) document.getElementById(id).scrollIntoView({ block: 'start' });
+    }
+    fromHash();
+    window.addEventListener('hashchange', fromHash);
   }
 
   /* ------------------------------------------------------------------ *
@@ -2507,7 +2576,7 @@
       en: 'Any level: a placement test puts you in the right class'
     }
   };
-  var HE_STAY = "Stay Back: 1 year after a Level 8 degree, 2 years after a Level 9 Master's";
+  var HE_STAY = "Graduate Programme: 12 months after a Level 8 degree; up to 24 months after Level 9+ if renewal conditions are met";
   var HE_WORK = '20 hours a week in term, 40 in holidays';
 
   // Course areas, read from each institution's listed subjects
@@ -2794,7 +2863,8 @@
       var rank = u.ranked
         ? '<div class="rank is-ranked"><b>#' + esc(u.rank) + '</b><small>Irish position, QS Europe 2026</small></div>'
         : '<div class="rank"><b>' + icon('i-landmark') + '</b><small>On the official register</small></div>';
-      return '<article class="ucard' + (on ? ' is-on' : '') + '" style="--i:' + i + '">' +
+      // Phase 10: ranked institutions and the type (for the coloured edge) are marked for CSS
+      return '<article class="ucard' + (u.ranked ? ' ucard--ranked' : '') + (on ? ' is-on' : '') + '" data-t="' + esc(u.type) + '" style="--i:' + i + '">' +
         '<div class="ucard__top">' + rank + '<span class="utype" data-t="' + esc(u.type) + '">' + esc(u.type) + '</span></div>' +
         '<h3>' + esc(u.name) + '</h3>' +
         '<p class="uloc">' + icon('i-pin') + esc(u.location) + '</p>' +
@@ -3112,6 +3182,7 @@
   initWeek();
   initRoute();
   initFaq();
+  initFaqMore();
   applyOrigin();
   initForms();
   initCheckin();

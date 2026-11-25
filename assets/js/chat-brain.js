@@ -145,7 +145,8 @@
     contact: 'Free counselling', footer: 'Contact details' };
 
   function sectionInfo(el, page) {
-    var sec = el.closest('section[id], footer, .band');
+    // #plan ("Plan your application") now sits inside #universities (Phase 13); its passages keep linking to it
+    var sec = el.closest('#plan, section[id], footer, .band');
     var id = sec ? (sec.id || (sec.tagName === 'FOOTER' ? 'footer' : '')) : '';
     var name = SECTION_NAMES[id];
     if (!name && sec) {
@@ -177,7 +178,8 @@
 
   // Elements whose text is not content worth answering from.
   var SKIP = 'script, style, svg, nav, header, .drawer, .rail, .dock, [data-chat], .chat, .sheet, .modal, .progress, ' +
-    '[aria-hidden="true"], form, .skip, .band--news, .newsban, .deck__ui, .tray, ' +
+    // illustrative placeholder content (student stories) is never indexed, so it can never be quoted as a real review
+    '[data-placeholder-content], [aria-hidden="true"], form, .skip, .band--news, .newsban, .deck__ui, .tray, ' +
     // the directory's plain-text list (fetched with universities.html): its data file is indexed instead
     '.ustatic';
 
@@ -215,10 +217,10 @@
         if (el.matches('li') && el.querySelector('p, li')) return;
         add({ title: nearestHeading(el), text: textOf(el), sec: sectionInfo(el, page), kind: el.matches('.voice') ? 'story' : undefined });
       });
-      // Section intros: heading + lede
+      // Section intros: heading + lede (the folded #plan intro has an h3 since Phase 13)
       [].slice.call(r.querySelectorAll('.sec-head, .checkin__head, .dir-hero')).forEach(function (h) {
         if (h.closest(SKIP)) return;
-        add({ title: (h.querySelector('h1, h2') || {}).textContent || '', text: textOf(h), sec: sectionInfo(h, page) });
+        add({ title: (h.querySelector('h1, h2, h3') || {}).textContent || '', text: textOf(h), sec: sectionInfo(h, page) });
       });
     });
   }
@@ -618,6 +620,41 @@
   // "How do I apply?" (to a university, not for a visa, loan or scholarship): how applying works here, then hand over
   var APPLY_Q = /\b(how (do|can|should|would|will) (i|we|one|students?) apply|how to apply|application process|admission process|applying (to|for) (a |an |the )?(universit\w*|unis?|college\w*|courses?|programm?e?s?|admissions?)|apply (to|for) (a |an |the )?(universit\w*|unis?|college\w*|courses?|programm?e?s?|admissions?))\b/;
   function asksHowToApply(q) { return APPLY_Q.test(q) && !/\b(visa|pass|permit|stamp|loans?|scholarships?|bursar\w*|grants?|jobs?|work)\b/.test(q); }
+  // "Can you guarantee…?" / "Will I definitely…?": no one can promise these outcomes, so the answer says so plainly
+  // before any topic answer. Visa questions keep the existing answer ("No, and no one honestly can…").
+  function guaranteeReply(text) {
+    var s = String(text || '').toLowerCase();
+    if (!/\b(guarantee[ds]?|guaranteeing|assured?|promise[ds]?)\b|100 ?%|\b(definitely|surely|certainly)\s+(get|be|receive|land|obtain|secure|win)\b|\bfor sure\b/.test(s)) return null;
+    var topics = [
+      [/\b(settle\w*|pr|permanent(ly)?|citizenship|stamp 4|long.term resid\w*)\b/, 'Stamp 4 or long-term residence', 'It depends on meeting Ireland\'s immigration conditions when you apply, and Ireland\'s immigration authorities decide.'],
+      [/\b(scholarships?|bursar(y|ies)|grants?|stipends?)\b/, 'a scholarship', 'Scholarships are awarded by universities and funding bodies, usually in competition with other applicants.'],
+      [/\b(jobs?|employment|employed|placements?|hired|career)\b/, 'a job', 'Jobs depend on employers, your skills and the job market; we help with your CV and job search.'],
+      [/\b(admissions?|admit\w*|offers?|get into|accepted|acceptance|seats?|a place)\b/, 'admission', 'Each university or college decides who it admits.'],
+      [/\b(loans?)\b/, 'a loan', 'Each lender makes its own decision on a loan.']
+    ];
+    for (var i = 0; i < topics.length; i++) if (topics[i][0].test(s))
+      return 'No, and no one can honestly guarantee ' + topics[i][1] + '. ' + topics[i][2] + ' What we do is help you prepare a strong, honest application, and a counsellor tells you plainly where your profile stands at your free counselling session.';
+    return null;
+  }
+  // "Which universities do you partner with?" ("partner" is not a spouse here) and proof-of-funds questions.
+  function extraReply(text) {
+    var s = String(text || '').toLowerCase();
+    // Phase 14: questions this page cannot answer (our own numbers, how details are shared, what our services cost,
+    // off-topic): say so and route to a counsellor, never a guessed passage. No figures, no new claims.
+    if ((/\bhow many\b/.test(s) && /\b(you|you've|tutee)\b/.test(s) && /\b(students?|people|clients|applicants|families|placed|helped|sent|guided|counsell?ed|admissions?|visas?)\b/.test(s) && !/\b(family|spouse|partner|wife|husband|children|kids|dependants?|bring|come with|join)\b/.test(s)) || (/\b(success|approval|acceptance|placement|visa|admission) (rates?|ratios?|percentages?|records?)\b|\btrack record\b/.test(s) && /\b(your|you|tutee)\b/.test(s) && !/\b(universit\w*|colleges?|institut\w*|schools?)\b/.test(s)))
+      return "We don't publish student numbers or success rates on this page, so I won't guess at them. A counsellor can tell you honestly how we work and what to expect for your profile on your free consultation.";
+    if ((/\b(share|sell|pass|give|send|disclose|hand|forward)\w*\b[^?.]*\b(my|our)\s+(personal\s+)?(details|data|information|info|number|phone|email|contacts?)\b/.test(s) && /\b(you|tutee|your (company|team))\b/.test(s) && !/\b(counsell?or|advisor|adviser|callback|call back|call me|contact me)\b/.test(s)) || /\b(privacy (policy|notice)|personal data|data protection|gdpr|dpdp)\b/.test(s) || (/\bprivacy\b/.test(s) && /\b(my|data|details|information)\b/.test(s)) || /\bmy (personal )?(data|details|information|info)\b[^?.]*\b(safe|secure|protected|stored|kept|used|deleted|delete|removed?)\b/.test(s) || /\bwho (sees|can see|gets|will see|has access to) my\b/.test(s))
+      return "I can't answer questions about how your details are used or shared reliably from this page, so I won't guess. Please ask a counsellor directly.";
+    if (/\bhow much (do|does|will|would) (you|you guys|tutee( connect)?|your (company|team|service|agency|consultancy)) (charge|cost|take)\b|\bdo you (charge|take (a )?(fee|commission))\b|\b(service|consultancy|consultant|agency|agent|counsell?ing|counsell?or) (fees?|charges?)\b/.test(s) || (/\b(your|tutee( connect)?'?s?) (fees?|charges?|price|pricing)\b/.test(s) && !/\b(tuition|visa|universit\w*|colleges?|living|rent|accommodation|insurance|application)\b/.test(s)))
+      return "This page doesn't list what our services cost, so I won't guess. Your first consultation is free, and a counsellor can explain any costs then. If you meant the cost of studying in Ireland, ask me about tuition or living costs.";
+    if (/\b(mars|jupiter|saturn|venus|pluto|outer space|world cup|ipl|premier league|bitcoin|crypto|cryptocurrenc\w*|stock market|share price|lottery|horoscope|recipes?|tell me a joke)\b/.test(s))
+      return "That's outside what I can help with. I answer questions about studying in Ireland, such as universities, courses, visas and working while you study, using what's on this page.";
+    if (/\b(partner\w*|tie.?ups?|affiliat\w*|official representatives?|collaborat\w*)\b/.test(s) && /\b(universit\w*|colleges?|institutions?|institutes?|schools?|unis?|providers?)\b/.test(s) && !/\b(spouse|wife|husband|children|kids|family|visa|training)\b/.test(s))
+      return "Our directory lists institutions from Ireland's official registers of programmes open to international students (the ILEP and TrustEd Ireland). Being on it doesn't mean an institution is a Tutee Connect partner. Your counsellor can answer questions about any university or college on your shortlist.";
+    if (/\b(proof of funds|bank balance|bank statements?)\b/.test(s) || (/\bshow\b/.test(s) && /\b(money|funds?|balance)\b/.test(s)))
+      return "Ireland's immigration authorities set how much money you must show for a study visa, and the figure can change, so we don't quote it here; the official guidance for students lists the current requirement. Our processing team helps you build a clear financial profile and sponsor documents for the proof-of-funds requirement, so your application is complete and consistent.";
+    return null;
+  }
   function needsCounsellor(q) {
     for (var i = 0; i < NEEDS_COUNSELLOR.length; i++) { var n = NEEDS_COUNSELLOR[i]; if (n[0].test(q) && (!n[1] || n[1].test(q))) return n[2]; }
     return '';
@@ -684,6 +721,16 @@
       q = fixTypos(q);
       var lq = q.toLowerCase();
       var asked = String(question).toLowerCase();
+      var guar = guaranteeReply(asked);
+      if (guar) {
+        ctx = { uni: null, subject: null, city: '', facet: '' };
+        return { type: 'answer', text: guar, sections: [{ id: 'contact', name: SECTION_NAMES.contact, page: 'home' }], suggest: ['Request a callback'] };
+      }
+      var extra = extraReply(asked);
+      if (extra) {
+        ctx = { uni: null, subject: null, city: '', facet: '' };
+        return { type: 'answer', text: extra, sections: [{ id: 'contact', name: SECTION_NAMES.contact, page: 'home' }], suggest: ['Request a callback'] };
+      }
       var unsure = !namesLandmark(asked) && needsCounsellor(asked);
       if (unsure) {
         ctx = { uni: null, subject: null, city: '', facet: '' };
@@ -693,6 +740,11 @@
         ctx = { uni: null, subject: null, city: '', facet: '' };
         return { type: 'answer', text: 'You apply to each Irish university or college directly, usually online through its own application portal, for the course you choose. Once you have an offer, you apply for your Irish study visa online (AVATS).\n\nEntry requirements and deadlines differ by institution and course, so a counsellor checks them for your shortlist on the free call.',
           sections: [{ id: 'contact', name: SECTION_NAMES.contact, page: 'home' }], suggest: ['Request a callback'] };
+      }
+      // Reviews: the student stories on the page are illustrative placeholders, so the answer never quotes them
+      if (/\b(reviews?|testimonials?|students say|feedback|legit|scam)\b/i.test(q)) {
+        return { type: 'answer', text: "We're still collecting verified reviews from our students, and we'll only publish ones they've agreed to share. Until then, the fastest way to judge us is a free counselling session: a counsellor will tell you honestly what Ireland would take for your profile.",
+          sections: [{ id: 'contact', name: SECTION_NAMES.contact, page: 'home' }], suggest: ['What services do you offer?'] };
       }
       var byMonth = intakeAnswer(lq);
       if (byMonth) return byMonth;

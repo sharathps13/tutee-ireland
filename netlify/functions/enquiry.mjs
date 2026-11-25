@@ -90,7 +90,7 @@ const COUNTRY_ALIASES = {
 const FIELD_LIMITS = {
   name: 120, email: 200, phone: 40, destination: 600, subject: 200, from_name: 120,
   state: 80, course: 120, call_time: 80, shortlist: 1500, study_level: 40, intake: 60,
-  form_location: 80, cta_source: 60, qualification: 80, english_test: 40,
+  form_location: 80, cta_source: 60,
 };
 
 // Fields this handler consumes by name. Anything else the form grows later is
@@ -101,7 +101,10 @@ const KNOWN_FIELDS = new Set(['name', 'email', 'phone', 'phone_number',
   'country_code', 'destination', 'from_name', 'page', 'botcheck',
   'access_key', 'subject', 'state', 'course', 'call_time', 'shortlist',
   'study_level', 'intake', 'form_location', 'utm_source', 'utm_medium',
-  'utm_campaign', 'utm_content', 'gclid', 'cta_source', 'qualification', 'english_test']);
+  'utm_campaign', 'utm_content', 'gclid', 'cta_source',
+  // no longer asked on the form (they have no column in the sheet); still listed so a
+  // page cached from before the change cannot push them into the email as extra rows
+  'qualification', 'english_test']);
 const MAX_EXTRA_FIELDS = 12;
 
 /** Collapse whitespace and strip CR/LF.
@@ -183,8 +186,6 @@ export function parsePayload(raw) {
     intake: clean(data.intake, FIELD_LIMITS.intake),
     form_location: clean(data.form_location, FIELD_LIMITS.form_location),
     cta_source: clean(data.cta_source, FIELD_LIMITS.cta_source),
-    qualification: clean(data.qualification, FIELD_LIMITS.qualification),
-    english_test: clean(data.english_test, FIELD_LIMITS.english_test),
     utm: ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content']
       .map((k) => clean(data[k], 100)).filter(Boolean),
     // Google Ads click id, so a qualified lead can later be uploaded as an offline conversion
@@ -194,15 +195,12 @@ export function parsePayload(raw) {
   };
 }
 
-/** "Master's – Data Science (Next intake) · B.Tech, 72% · English: Test booked":
- * level, course and start, then the optional qualification and English test,
- * all in the sheet's single Course column (the sheet itself is unchanged). */
+/** "Master's – Data Science (Next intake)": level, course and start, all in the
+ * sheet's single Course column (the sheet itself is unchanged). */
 export function courseLine(f) {
   const level = /^not sure/i.test(f.study_level) ? 'Level not decided' : f.study_level;
   const main = [level, f.course].filter(Boolean).join(' – ');
-  return main + (f.intake ? `${main ? ' ' : ''}(${f.intake})` : '')
-    + (f.qualification ? ` · ${f.qualification}` : '')
-    + (f.english_test ? ` · English: ${f.english_test}` : '');
+  return main + (f.intake ? `${main ? ' ' : ''}(${f.intake})` : '');
 }
 
 /** Where the lead came from: page, then form, then any campaign tags, the
@@ -228,6 +226,16 @@ export function validate(f) {
   if (digits.length < 7 || digits.length > 15) {
     return 'Please enter a valid phone number (7-15 digits).';
   }
+  // The forms' own rules for the two main markets, so a number the page would
+  // refuse (for example "+91 12345") is not accepted when posted directly.
+  const national = (cc) => digits.slice(cc.length).replace(/^0/, '');
+  const intl = f.phone.trim();
+  if (intl.startsWith('+91') && !/^[2-9]\d{9}$/.test(national('91'))) {
+    return 'Indian numbers have 10 digits after +91.';
+  }
+  if (intl.startsWith('+971') && !/^\d{8,9}$/.test(national('971'))) {
+    return 'UAE numbers have 8 or 9 digits after +971.';
+  }
   return null;
 }
 
@@ -251,8 +259,6 @@ export function buildEmail(f, country, leadRef = '') {
   if (f.state) rows.push(['State', f.state]);
   if (f.shortlist) rows.push(['Shortlisted Universities', f.shortlist]);
   if (courseLine(f)) rows.push(['Course', courseLine(f)]);
-  if (f.qualification) rows.push(['Highest Qualification', f.qualification]);
-  if (f.english_test) rows.push(['English Test', f.english_test]);
   rows.push(['Lead Source', leadSource(f, country, leadRef)]);
   if (f.cta_source) rows.push(['CTA Source', f.cta_source]);
   if (leadRef) rows.push(['Lead Ref', leadRef]);
@@ -324,7 +330,8 @@ async function sendViaResend(payload) {
     // revoked key, a rate limit. That detail belongs in the function log,
     // never in the browser response.
     let detail = '';
-    try { detail = (await res.text()).slice(0, 400); } catch { /* ignore */ }
+    // the error code only: provider messages can quote the submitted values
+    try { const j = await res.json(); detail = String(j.code || j.name || '').replace(/[^\w.-]/g, '').slice(0, 40); } catch { /* not JSON */ }
     throw new Error(`resend rejected the send: HTTP ${res.status} ${detail}`);
   }
   try {
@@ -349,10 +356,9 @@ async function storeInSupabase(f, country, leadRef) {
     destination: f.destination,
     source: f.from_name,
     page: f.page || null,
-    // the optional qualifiers and the lead reference have no columns of their own
+    // the CTA source and the lead reference have no columns of their own
     extras: Object.fromEntries(f.extras.concat([
-      ['cta_source', f.cta_source], ['qualification', f.qualification],
-      ['english_test', f.english_test], ['lead_ref', leadRef],
+      ['cta_source', f.cta_source], ['lead_ref', leadRef],
     ].filter(([, v]) => v))),
   };
 
@@ -362,7 +368,8 @@ async function storeInSupabase(f, country, leadRef) {
 
   if (!res.ok) {
     let detail = '';
-    try { detail = (await res.text()).slice(0, 400); } catch { /* ignore */ }
+    // the error code only: provider messages can quote the submitted values
+    try { const j = await res.json(); detail = String(j.code || j.name || '').replace(/[^\w.-]/g, '').slice(0, 40); } catch { /* not JSON */ }
     throw new Error(`supabase rejected the insert: HTTP ${res.status} ${detail}`);
   }
   try {
@@ -400,7 +407,7 @@ async function sendToAppsScript(f, country, leadRef) {
   if (!res.ok || !parsed?.success) {
     throw new Error(`apps script refused the lead: HTTP ${res.status} ${parsed?.message || ''}`);
   }
-  if (parsed.mailed === false) console.error(`enquiry: apps script saved the lead but could not email it: ${parsed.mail_error || 'no detail'}`);
+  if (parsed.mailed === false) console.error(`enquiry: apps script saved the lead but could not email it: ${redact(parsed.mail_error || 'no detail')}`);
   return { saved: true, mailed: parsed.mailed !== false };
 }
 
@@ -507,6 +514,175 @@ function json(status, payload) {
   });
 }
 
+/* ---------------------------------------------------------------------------
+ * Phase 6 hardening (12 Nov 2026). The same block is in all six sites.
+ *
+ * - Content types: only JSON (what the page's script sends) and a plain HTML
+ *   form post (urlencoded, sent when the script did not run) are accepted.
+ *   Anything else gets 415. This also stops cross-site text/plain posts.
+ * - Origin: a browser request from another site (Sec-Fetch-Site: cross-site,
+ *   Origin: null, or an Origin whose host is not this site's) gets 403.
+ *   Requests with no Origin header (not a browser) go on to the other checks.
+ * - Rate limit: best effort only. Counted in memory, per function instance:
+ *   30 posts per 10 minutes per client IP (stored hashed). The limit is high
+ *   on purpose, so a shared university or office network is not blocked.
+ *   Instances do not share memory and are recycled, so this is not a reliable
+ *   limit; a platform-level limit needs the site owner's Netlify settings.
+ * - Duplicates: an identical submission (same fields) within 10 minutes of a
+ *   successful one gets the first reply and reference, and is not sent again.
+ *   Also per instance only.
+ * - A form posted without the page's script gets a short HTML page (no
+ *   submitted value is echoed) instead of JSON, so the visitor sees the result.
+ * ------------------------------------------------------------------------- */
+const RATE_LIMIT = 30;
+const RATE_WINDOW_MS = 10 * 60 * 1000;
+const DUP_WINDOW_MS = 10 * 60 * 1000;
+const MEMO_MAX = 2000;
+const recentPosts = new Map();      // hashed client IP -> times of its recent posts
+const recentLeads = new Map();      // hash of the submitted fields -> { at, result }
+const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
+
+async function sha256(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function capSize(map) {
+  // a Map keeps insertion order, so the oldest entries go first
+  while (map.size > MEMO_MAX) map.delete(map.keys().next().value);
+}
+
+/** Log text without addresses or long numbers: provider errors can quote what was submitted. */
+function redact(text) {
+  return String(text ?? '')
+    .replace(/[^\s@<>"']+@[^\s@<>"']+/g, '<email>')
+    .replace(/\+?\d[\d\s().-]{5,}\d/g, '<number>')
+    .slice(0, 200);
+}
+
+function mediaType(req) {
+  return (req.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+}
+
+/** A plain HTML form post (the page's script did not run): answer with a page. */
+export function wantsPage(req) {
+  return mediaType(req) === 'application/x-www-form-urlencoded'
+    && !(req.headers.get('accept') || '').toLowerCase().includes('application/json');
+}
+
+/** False when a browser says the post comes from another site. */
+export function sameOrigin(req) {
+  if ((req.headers.get('sec-fetch-site') || '').toLowerCase() === 'cross-site') return false;
+  const origin = req.headers.get('origin');
+  if (!origin) return true;
+  let from;
+  try { from = new URL(origin).host.toLowerCase(); } catch { return false; }   // "null" lands here
+  const own = [req.headers.get('x-forwarded-host'), req.headers.get('host')];
+  try { own.push(new URL(req.url).host); } catch { /* no URL */ }
+  const hosts = own.filter(Boolean).map((h) => h.split(',')[0].trim().toLowerCase());
+  if (hosts.includes(from)) return true;
+  // local development only: a localhost page may post to a localhost server on another port
+  return LOCAL_HOST.test(from) && hosts.some((h) => LOCAL_HOST.test(h));
+}
+
+function clientIp(req) {
+  return (req.headers.get('x-nf-client-connection-ip')
+    || (req.headers.get('x-forwarded-for') || '').split(',')[0] || '').trim();
+}
+
+async function overLimit(req) {
+  const ip = clientIp(req);
+  if (!ip) return false;
+  const key = await sha256(`ip:${ip}`);
+  const now = Date.now();
+  const times = (recentPosts.get(key) || []).filter((t) => now - t < RATE_WINDOW_MS);
+  times.push(now);
+  recentPosts.delete(key);
+  recentPosts.set(key, times);
+  capSize(recentPosts);
+  return times.length > RATE_LIMIT;
+}
+
+/** Checks made before the body is read. Returns { status, payload } to refuse, or null. */
+export async function guard(req) {
+  const type = mediaType(req);
+  if (type !== 'application/json' && type !== 'application/x-www-form-urlencoded') {
+    console.warn(`enquiry: refused content type ${type.replace(/[^\w/+.-]/g, '').slice(0, 40) || '(none)'}`);
+    return { status: 415, payload: { success: false, message: 'Unsupported submission format.' } };
+  }
+  if (!sameOrigin(req)) {
+    console.warn('enquiry: refused a post from another site');
+    return { status: 403, payload: { success: false, message: 'This form can only be sent from this website.' } };
+  }
+  if (await overLimit(req)) {
+    console.warn('enquiry: rate limit reached on this instance');
+    return {
+      status: 429,
+      payload: {
+        success: false,
+        message: 'Too many submissions from this network. Please wait a few minutes and try again, '
+          + 'or WhatsApp us on +91 73583 64959.',
+      },
+    };
+  }
+  return null;
+}
+
+async function leadKey(raw) {
+  let f;
+  try { f = parsePayload(raw); } catch { return null; }
+  if (validate(f)) return null;
+  return sha256(`lead:${JSON.stringify(f)}`);
+}
+
+/** handle(), but an identical submission shortly after a successful one is not sent twice. */
+export async function handleOnce(raw, headers) {
+  const key = await leadKey(raw);
+  const prior = key && recentLeads.get(key);
+  if (prior && Date.now() - prior.at < DUP_WINDOW_MS) {
+    const earlier = await prior.result;
+    if (earlier.status === 200) {
+      console.log(`enquiry: duplicate of ref=${earlier.payload.lead_id || '-'}, not sent again`);
+      return earlier;
+    }
+  }
+  const task = handle(raw, headers);
+  if (key) {
+    recentLeads.set(key, { at: Date.now(), result: task.catch(() => ({ status: 500 })) });
+    capSize(recentLeads);
+  }
+  const result = await task;                  // a throw here is answered with 500 by the caller
+  if (key && result.status !== 200) recentLeads.delete(key);
+  return result;
+}
+
+/** The reply to a no-JavaScript form post. Only fixed messages are shown, never a submitted value. */
+function page(status, payload) {
+  const ok = status === 200 && Boolean(payload && payload.success);
+  const title = ok ? 'Enquiry sent' : 'Enquiry not sent';
+  const text = (payload && payload.message) || 'Please try again.';
+  const next = ok
+    ? '<a href="/">Back to the page</a>'
+    : 'Use your browser’s Back button to return to the form, or <a href="https://wa.me/917358364959">WhatsApp us</a>.';
+  const html = '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+    + '<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">'
+    + `<title>${title} | Tutee Connect</title>`
+    + '<style>body{font:17px/1.6 system-ui,sans-serif;max-width:36rem;margin:12vh auto;padding:0 20px;'
+    + 'color:#1a1a1a;background:#fff}h1{font-size:1.6rem;line-height:1.2}a{color:#0b57d0}</style></head>'
+    + `<body><main><h1>${title}</h1><p>${esc(text)}</p><p>${next}</p></main></body></html>`;
+  return new Response(html, {
+    status,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'no-referrer',
+      'X-Robots-Tag': 'noindex',
+      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    },
+  });
+}
+
 /** Netlify Functions v2 entry point. */
 export default async function (req) {
   // Public probe: proves the endpoint is up and nothing more.
@@ -516,19 +692,25 @@ export default async function (req) {
     return json(405, { success: false, message: 'Method not allowed.' });
   }
 
+  // a form posted without the page's script is answered with a page, not JSON
+  const asPage = wantsPage(req);
+  const reply = (status, payload) => (asPage ? page(status, payload) : json(status, payload));
+  const refused = await guard(req);
+  if (refused) return reply(refused.status, refused.payload);
+
   const declared = Number(req.headers.get('content-length') || 0);
   if (declared > MAX_BODY_BYTES) {
-    return json(413, { success: false, message: 'Submission too large.' });
+    return reply(413, { success: false, message: 'Submission too large.' });
   }
 
   let raw = '';
   try {
     raw = await req.text();
   } catch {
-    return json(400, { success: false, message: 'Could not read the submission.' });
+    return reply(400, { success: false, message: 'Could not read the submission.' });
   }
   if (raw.length > MAX_BODY_BYTES) {          // chunked requests declare no length
-    return json(413, { success: false, message: 'Submission too large.' });
+    return reply(413, { success: false, message: 'Submission too large.' });
   }
 
   const headers = {
@@ -537,12 +719,12 @@ export default async function (req) {
   };
 
   try {
-    const { status, payload } = await handle(raw, headers);
-    return json(status, payload);
+    const { status, payload } = await handleOnce(raw, headers);
+    return reply(status, payload);
   } catch (exc) {
     // never leak a key, an endpoint or provider detail to the browser
-    console.error(`enquiry: unhandled: ${exc?.name}: ${exc?.message}`);
-    return json(500, {
+    console.error(`enquiry: unhandled: ${exc?.name}: ${redact(exc?.message)}`);
+    return reply(500, {
       success: false,
       message: 'We could not send your enquiry right now. Please email '
         + 'info@tuteeconnect.com directly.',
